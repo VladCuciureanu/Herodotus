@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { rewrite } from "../src/rewriter";
-import type { AlibiConfig } from "../src/types";
+import type { HerodotusConfig } from "../src/types";
 
 function git(args: string[], cwd: string): string {
   const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
@@ -14,7 +14,7 @@ function git(args: string[], cwd: string): string {
 }
 
 function createTestRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "alibi-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "herodotus-test-"));
   git(["init", "-b", "main"], dir);
   git(["config", "user.name", "Test User"], dir);
   git(["config", "user.email", "test@example.com"], dir);
@@ -47,7 +47,7 @@ describe("rewriter", () => {
   });
 
   test("dry run reports changes without modifying repo", () => {
-    const config: AlibiConfig = {
+    const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
       schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", weekends: false },
       inPlace: false,
@@ -64,12 +64,12 @@ describe("rewriter", () => {
       const log = git(["log", "--oneline"], repoDir);
       expect(log).toContain("Fix bug");
       // Branch should not exist
-      expect(() => git(["rev-parse", "alibi/main"], repoDir)).toThrow();
+      expect(() => git(["rev-parse", "herodotus/main"], repoDir)).toThrow();
     });
   });
 
   test("rewrites to new branch with correct identity", async () => {
-    const config: AlibiConfig = {
+    const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
       schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", weekends: false },
       inPlace: false,
@@ -84,10 +84,10 @@ describe("rewriter", () => {
 
     // Check the new branch exists
     const branches = git(["branch"], repoDir);
-    expect(branches).toContain("alibi/main");
+    expect(branches).toContain("herodotus/main");
 
     // Check author on new branch
-    const author = git(["log", "--format=%an <%ae>", "alibi/main"], repoDir);
+    const author = git(["log", "--format=%an <%ae>", "herodotus/main"], repoDir);
     const lines = author.split("\n");
     for (const line of lines) {
       expect(line).toBe("New Author <new@example.com>");
@@ -95,7 +95,7 @@ describe("rewriter", () => {
   });
 
   test("strips AI co-authors but keeps human ones", async () => {
-    const config: AlibiConfig = {
+    const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
       schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", weekends: false },
       inPlace: false,
@@ -109,7 +109,7 @@ describe("rewriter", () => {
     await rewrite(config);
 
     // Check commit messages on new branch
-    const messages = git(["log", "--format=%B", "alibi/main"], repoDir);
+    const messages = git(["log", "--format=%B", "herodotus/main"], repoDir);
 
     // Claude co-author should be stripped
     expect(messages).not.toContain("noreply@anthropic.com");
@@ -120,7 +120,7 @@ describe("rewriter", () => {
   });
 
   test("timestamps are within work hours", async () => {
-    const config: AlibiConfig = {
+    const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
       schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", weekends: false },
       inPlace: false,
@@ -133,7 +133,7 @@ describe("rewriter", () => {
 
     await rewrite(config);
 
-    const dates = git(["log", "--format=%ai", "alibi/main"], repoDir);
+    const dates = git(["log", "--format=%ai", "herodotus/main"], repoDir);
     for (const line of dates.split("\n").filter(Boolean)) {
       const d = new Date(line);
       const hours = d.getUTCHours();

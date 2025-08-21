@@ -10,7 +10,7 @@ export interface ScheduleConfig {
   weekends: boolean;
 }
 
-export interface AlibiConfig {
+export interface HerodotusConfig {
   identities: Identity[];
   schedule: ScheduleConfig;
   inPlace: boolean;

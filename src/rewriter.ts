@@ -1,4 +1,4 @@
-import type { AlibiConfig, Identity, CommitInfo } from "./types";
+import type { HerodotusConfig, Identity, CommitInfo } from "./types";
 import { stripAiCoAuthors } from "./ai-authors";
 import { createIdentityPicker } from "./identity";
 import { redistributeTimestamps } from "./timeline";
@@ -180,7 +180,7 @@ function serializeCommit(commit: ParsedCommit): string {
 /**
  * Run the full rewrite pipeline.
  */
-export async function rewrite(config: AlibiConfig): Promise<CommitInfo[]> {
+export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   const { repoPath, branch, schedule, seed } = config;
 
   // Export
@@ -260,7 +260,7 @@ export async function rewrite(config: AlibiConfig): Promise<CommitInfo[]> {
   }).join("\n");
 
   // Determine target ref
-  const targetRef = config.inPlace ? branch : `alibi/${branch}`;
+  const targetRef = config.inPlace ? branch : `herodotus/${branch}`;
 
   // Create backup if in-place
   if (config.inPlace && config.backup) {
