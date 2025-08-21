@@ -1,12 +1,17 @@
-import type { Identity } from "./types";
+import type { Identity } from "./types.ts";
 
 function run(cmd: string[], cwd: string): string {
-  const result = Bun.spawnSync(cmd, { cwd, stderr: "pipe", stdout: "pipe" });
-  if (result.exitCode !== 0) {
-    const stderr = result.stderr.toString().trim();
+  const result = new Deno.Command(cmd[0], {
+    args: cmd.slice(1),
+    cwd,
+    stderr: "piped",
+    stdout: "piped",
+  }).outputSync();
+  if (result.code !== 0) {
+    const stderr = new TextDecoder().decode(result.stderr).trim();
     throw new Error(`Command failed: ${cmd.join(" ")}\n${stderr}`);
   }
-  return result.stdout.toString().trim();
+  return new TextDecoder().decode(result.stdout).trim();
 }
 
 export function getDefaultIdentity(repoPath: string): Identity {

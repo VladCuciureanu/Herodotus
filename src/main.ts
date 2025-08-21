@@ -1,12 +1,12 @@
-#!/usr/bin/env bun
-import { parseCli } from "./cli";
-import { runInit } from "./init";
-import { rewrite } from "./rewriter";
-import { isWorkingTreeClean, branchExists } from "./utils";
-import { resolve } from "path";
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run
+import { parseCli } from "./cli.ts";
+import { runInit } from "./init.ts";
+import { rewrite } from "./rewriter.ts";
+import { isWorkingTreeClean, branchExists } from "./utils.ts";
+import { resolve } from "node:path";
 
 async function main() {
-  const args = process.argv.slice(2);
+  const args = Deno.args;
 
   if (args[0] === "init") {
     const repoPath = resolve(args[1] ?? ".");
@@ -19,17 +19,17 @@ async function main() {
   // Safety checks
   if (!config.dryRun && !isWorkingTreeClean(config.repoPath)) {
     console.error("Error: working tree has uncommitted changes. Commit or stash them first.");
-    process.exit(1);
+    Deno.exit(1);
   }
 
   if (!branchExists(config.repoPath, config.branch)) {
     console.error(`Error: branch "${config.branch}" does not exist.`);
-    process.exit(1);
+    Deno.exit(1);
   }
 
   if (!config.inPlace && branchExists(config.repoPath, `herodotus/${config.branch}`)) {
     console.error(`Error: branch "herodotus/${config.branch}" already exists. Delete it first or use --in-place.`);
-    process.exit(1);
+    Deno.exit(1);
   }
 
   console.log(`Herodotus: rewriting ${config.branch}${config.dryRun ? " (dry run)" : ""}`);
@@ -60,5 +60,5 @@ async function main() {
 
 main().catch((err) => {
   console.error(`Error: ${err.message}`);
-  process.exit(1);
+  Deno.exit(1);
 });

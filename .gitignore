@@ -1,10 +1,10 @@
-# dependencies (bun install)
+# dependencies
 node_modules
 
 # output
 out
 dist
-*.tgz
+herodotus
 
 # code coverage
 coverage
@@ -12,23 +12,22 @@ coverage
 
 # logs
 logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.log
 
-# dotenv environment variable files
+# dotenv
 .env
-.env.development.local
-.env.test.local
-.env.production.local
 .env.local
+.env.*.local
 
 # caches
-.eslintcache
 .cache
 *.tsbuildinfo
 
-# IntelliJ based IDEs
+# Deno
+deno.lock
+
+# IntelliJ
 .idea
 
-# Finder (MacOS) folder config
+# macOS
 .DS_Store

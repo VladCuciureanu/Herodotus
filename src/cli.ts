@@ -1,7 +1,7 @@
-import { parseArgs } from "util";
-import { resolve } from "path";
-import type { HerodotusConfig, Identity } from "./types";
-import { loadConfigAsync, buildConfig, parseDays, parseAnchor } from "./config";
+import { parseArgs } from "node:util";
+import { resolve } from "node:path";
+import type { HerodotusConfig, Identity } from "./types.ts";
+import { loadConfigAsync, buildConfig, parseDays, parseAnchor } from "./config.ts";
 
 function parseIdentity(s: string): Identity {
   const colonIdx = s.lastIndexOf(":");
@@ -46,7 +46,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
 
   if (values.help) {
     printUsage();
-    process.exit(0);
+    Deno.exit(0);
   }
 
   const repoPath = resolve(positionals[0] ?? ".");

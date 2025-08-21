@@ -1,16 +1,26 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
-import { rewrite } from "../src/rewriter";
-import type { HerodotusConfig } from "../src/types";
+import { describe, it, beforeEach, afterEach } from "jsr:@std/testing/bdd";
+import { expect } from "jsr:@std/expect";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { rewrite } from "../src/rewriter.ts";
+import type { HerodotusConfig } from "../src/types.ts";
 
 function git(args: string[], cwd: string): string {
-  const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
-  if (result.exitCode !== 0) {
-    throw new Error(`git ${args.join(" ")} failed: ${result.stderr.toString()}`);
+  const result = new Deno.Command("git", {
+    args,
+    cwd,
+    stdout: "piped",
+    stderr: "piped",
+  }).outputSync();
+  if (result.code !== 0) {
+    throw new Error(`git ${args.join(" ")} failed: ${new TextDecoder().decode(result.stderr)}`);
   }
-  return result.stdout.toString().trim();
+  return new TextDecoder().decode(result.stdout).trim();
+}
+
+function writeFile(path: string, content: string): void {
+  Deno.writeTextFileSync(path, content);
 }
 
 function createTestRepo(): string {
@@ -19,21 +29,22 @@ function createTestRepo(): string {
   git(["config", "user.name", "Test User"], dir);
   git(["config", "user.email", "test@example.com"], dir);
 
-  // Create commits with AI co-author trailers
-  Bun.spawnSync(["bash", "-c", `echo "file1" > file1.txt`], { cwd: dir });
+  writeFile(join(dir, "file1.txt"), "file1\n");
   git(["add", "file1.txt"], dir);
   git(["commit", "-m", "Initial commit\n\nCo-Authored-By: Claude <noreply@anthropic.com>", "--date", "2024-01-08T03:00:00+0000"], dir);
 
-  Bun.spawnSync(["bash", "-c", `echo "file2" > file2.txt`], { cwd: dir });
+  writeFile(join(dir, "file2.txt"), "file2\n");
   git(["add", "file2.txt"], dir);
   git(["commit", "-m", "Add feature\n\nCo-Authored-By: Alice <alice@example.com>", "--date", "2024-01-08T04:00:00+0000"], dir);
 
-  Bun.spawnSync(["bash", "-c", `echo "file3" > file3.txt`], { cwd: dir });
+  writeFile(join(dir, "file3.txt"), "file3\n");
   git(["add", "file3.txt"], dir);
   git(["commit", "-m", "Fix bug\n\nCo-Authored-By: GitHub Copilot <noreply@github.com>", "--date", "2024-01-09T02:30:00+0000"], dir);
 
   return dir;
 }
+
+const schedule = { start: 9 * 60, end: 18 * 60, timezone: "UTC", allowedDays: [1, 2, 3, 4, 5], anchor: { type: "start" as const, date: new Date("2024-01-08T09:00:00Z") } };
 
 describe("rewriter", () => {
   let repoDir: string;
@@ -46,10 +57,10 @@ describe("rewriter", () => {
     rmSync(repoDir, { recursive: true, force: true });
   });
 
-  test("dry run reports changes without modifying repo", () => {
+  it("dry run reports changes without modifying repo", async () => {
     const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
-      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", allowedDays: [1, 2, 3, 4, 5], anchor: { type: "start", date: new Date("2024-01-08T09:00:00Z") } },
+      schedule,
       inPlace: false,
       dryRun: true,
       branch: "main",
@@ -58,20 +69,17 @@ describe("rewriter", () => {
       seed: 42,
     };
 
-    return rewrite(config).then((changes) => {
-      expect(changes.length).toBe(3);
-      // Verify original repo is untouched
-      const log = git(["log", "--oneline"], repoDir);
-      expect(log).toContain("Fix bug");
-      // Branch should not exist
-      expect(() => git(["rev-parse", "herodotus/main"], repoDir)).toThrow();
-    });
+    const changes = await rewrite(config);
+    expect(changes.length).toBe(3);
+    const log = git(["log", "--oneline"], repoDir);
+    expect(log).toContain("Fix bug");
+    expect(() => git(["rev-parse", "herodotus/main"], repoDir)).toThrow();
   });
 
-  test("rewrites to new branch with correct identity", async () => {
+  it("rewrites to new branch with correct identity", async () => {
     const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
-      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", allowedDays: [1, 2, 3, 4, 5], anchor: { type: "start", date: new Date("2024-01-08T09:00:00Z") } },
+      schedule,
       inPlace: false,
       dryRun: false,
       branch: "main",
@@ -82,11 +90,9 @@ describe("rewriter", () => {
 
     await rewrite(config);
 
-    // Check the new branch exists
     const branches = git(["branch"], repoDir);
     expect(branches).toContain("herodotus/main");
 
-    // Check author on new branch
     const author = git(["log", "--format=%an <%ae>", "herodotus/main"], repoDir);
     const lines = author.split("\n");
     for (const line of lines) {
@@ -94,10 +100,10 @@ describe("rewriter", () => {
     }
   });
 
-  test("strips AI co-authors but keeps human ones", async () => {
+  it("strips AI co-authors but keeps human ones", async () => {
     const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
-      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", allowedDays: [1, 2, 3, 4, 5], anchor: { type: "start", date: new Date("2024-01-08T09:00:00Z") } },
+      schedule,
       inPlace: false,
       dryRun: false,
       branch: "main",
@@ -108,21 +114,16 @@ describe("rewriter", () => {
 
     await rewrite(config);
 
-    // Check commit messages on new branch
     const messages = git(["log", "--format=%B", "herodotus/main"], repoDir);
-
-    // Claude co-author should be stripped
     expect(messages).not.toContain("noreply@anthropic.com");
-    // Copilot co-author should be stripped
     expect(messages).not.toContain("noreply@github.com");
-    // Human co-author should remain
     expect(messages).toContain("Alice <alice@example.com>");
   });
 
-  test("timestamps are within work hours", async () => {
+  it("timestamps are within work hours", async () => {
     const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
-      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", allowedDays: [1, 2, 3, 4, 5], anchor: { type: "start", date: new Date("2024-01-08T09:00:00Z") } },
+      schedule,
       inPlace: false,
       dryRun: false,
       branch: "main",

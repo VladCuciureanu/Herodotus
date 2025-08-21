@@ -15,16 +15,16 @@ A git history rewriter that makes your commit log look like it was written by a 
 
 ```bash
 # Run on the current repo (writes to herodotus/<branch>)
-bun run src/main.ts
+deno task start
 
 # Specify an identity
-bun run src/main.ts -i "Ada Lovelace:ada@example.com"
+deno task start -i "Ada Lovelace:ada@example.com"
 
 # Preview changes without modifying anything
-bun run src/main.ts --dry-run
+deno task start --dry-run
 
 # Rewrite in-place (creates a backup ref)
-bun run src/main.ts --in-place
+deno task start --in-place
 ```
 
 ## Configuration
@@ -76,9 +76,8 @@ Herodotus pipes your branch through `git fast-export`, transforms the stream in 
 ## Build
 
 ```bash
-bun install
-bun run build    # compiles to ./herodotus binary
-bun test         # run the test suite
+deno task build    # compiles to ./herodotus binary
+deno task test     # run the test suite
 ```
 
 ## License

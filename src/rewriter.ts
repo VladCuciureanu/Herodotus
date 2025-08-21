@@ -1,8 +1,8 @@
-import type { HerodotusConfig, Identity, CommitInfo } from "./types";
-import { stripAiCoAuthors } from "./ai-authors";
-import { capitalizeConventionalCommit } from "./commit-message";
-import { createIdentityPicker } from "./identity";
-import { redistributeTimestamps } from "./timeline";
+import type { HerodotusConfig, Identity, CommitInfo } from "./types.ts";
+import { stripAiCoAuthors } from "./ai-authors.ts";
+import { capitalizeConventionalCommit } from "./commit-message.ts";
+import { createIdentityPicker } from "./identity.ts";
+import { redistributeTimestamps } from "./timeline.ts";
 
 interface ParsedCommit {
   headerLines: string[]; // lines before the data section (commit, mark, author, committer, from, merge)
@@ -119,19 +119,21 @@ function parseCommitBlock(lines: string[], start: number): { parsed: ParsedCommi
     i++; // skip "data N" line
 
     // Read exactly dataLength bytes from subsequent lines
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
     let bytesRead = 0;
     const messageLines: string[] = [];
     while (i < lines.length && bytesRead < dataLength) {
       const line = lines[i];
       messageLines.push(line);
-      bytesRead += Buffer.byteLength(line, "utf8") + 1; // +1 for newline
+      bytesRead += encoder.encode(line).length + 1; // +1 for newline
       i++;
     }
     message = messageLines.join("\n");
     // Trim to exact byte length if needed
-    const messageBytes = Buffer.from(message, "utf8");
+    const messageBytes = encoder.encode(message);
     if (messageBytes.length > dataLength) {
-      message = Buffer.from(messageBytes.subarray(0, dataLength)).toString("utf8");
+      message = decoder.decode(messageBytes.subarray(0, dataLength));
     }
   }
 
@@ -167,7 +169,7 @@ function serializeCommit(commit: ParsedCommit): string {
     }
   }
 
-  const msgBytes = Buffer.byteLength(commit.message, "utf8");
+  const msgBytes = new TextEncoder().encode(commit.message).length;
   lines.push(`data ${msgBytes}`);
   lines.push(commit.message);
 
@@ -185,22 +187,18 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   const { repoPath, branch, schedule, seed } = config;
 
   // Export
-  const exportProc = Bun.spawnSync(
-    ["git", "fast-export", "--no-data", branch],
-    { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
-  );
+  const fullExportProc = new Deno.Command("git", {
+    args: ["fast-export", branch],
+    cwd: repoPath,
+    stdout: "piped",
+    stderr: "piped",
+  }).outputSync();
 
-  // --no-data won't work for import, we need full data. Let's use full export.
-  const fullExportProc = Bun.spawnSync(
-    ["git", "fast-export", branch],
-    { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
-  );
-
-  if (fullExportProc.exitCode !== 0) {
-    throw new Error(`git fast-export failed: ${fullExportProc.stderr.toString()}`);
+  if (fullExportProc.code !== 0) {
+    throw new Error(`git fast-export failed: ${new TextDecoder().decode(fullExportProc.stderr)}`);
   }
 
-  const exportData = fullExportProc.stdout.toString();
+  const exportData = new TextDecoder().decode(fullExportProc.stdout);
   const entries = parseFastExport(exportData);
 
   // Collect commit timestamps for redistribution
@@ -271,15 +269,9 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
 
   // Create backup if in-place
   if (config.inPlace && config.backup) {
-    const { createBackupRef } = await import("./utils");
+    const { createBackupRef } = await import("./utils.ts");
     createBackupRef(repoPath, branch, config.backup as string);
   }
-
-  // Import
-  const importProc = Bun.spawn(
-    ["git", "fast-import", "--force", "--quiet"],
-    { cwd: repoPath, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
-  );
 
   // Write the modified stream, replacing the branch ref
   const modifiedOutput = output.replace(
@@ -287,12 +279,22 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
     `commit refs/heads/${targetRef}`,
   );
 
-  importProc.stdin.write(modifiedOutput);
-  importProc.stdin.end();
+  // Import
+  const importProc = new Deno.Command("git", {
+    args: ["fast-import", "--force", "--quiet"],
+    cwd: repoPath,
+    stdin: "piped",
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
 
-  const exitCode = await importProc.exited;
-  if (exitCode !== 0) {
-    const stderr = await new Response(importProc.stderr).text();
+  const writer = importProc.stdin.getWriter();
+  await writer.write(new TextEncoder().encode(modifiedOutput));
+  await writer.close();
+
+  const importResult = await importProc.output();
+  if (importResult.code !== 0) {
+    const stderr = new TextDecoder().decode(importResult.stderr);
     throw new Error(`git fast-import failed: ${stderr}`);
   }
 

@@ -1,5 +1,5 @@
-import type { ScheduleConfig } from "./types";
-import { seededRandom, gaussianRandom } from "./random";
+import type { ScheduleConfig } from "./types.ts";
+import { seededRandom, gaussianRandom } from "./random.ts";
 
 const MIN_GAP_MS = 2 * 60 * 1000; // 2 minutes
 const MAX_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours

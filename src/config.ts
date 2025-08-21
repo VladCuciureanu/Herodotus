@@ -1,8 +1,8 @@
 import { parse as parseToml } from "smol-toml";
-import { existsSync } from "fs";
-import { resolve } from "path";
-import type { HerodotusConfig, Identity, ScheduleConfig } from "./types";
-import { getDefaultIdentity, getCurrentBranch } from "./utils";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import type { HerodotusConfig, Identity, ScheduleConfig } from "./types.ts";
+import { getDefaultIdentity, getCurrentBranch } from "./utils.ts";
 
 function parseTime(s: string): number {
   const [h, m] = s.split(":").map(Number);
@@ -56,19 +56,6 @@ interface TomlConfig {
   };
 }
 
-export function loadConfig(
-  configPath: string | undefined,
-  repoPath: string,
-): Partial<HerodotusConfig> {
-  const filePath = resolve(repoPath, configPath ?? ".herodotus.toml");
-  if (!existsSync(filePath)) return {};
-
-  const raw = Bun.file(filePath).text();
-  // smol-toml parse is sync when given a string but the Bun.file().text() is async
-  // We'll handle this in the async main function instead
-  return { _configPath: filePath } as any;
-}
-
 export async function loadConfigAsync(
   configPath: string | undefined,
   repoPath: string,
@@ -76,7 +63,7 @@ export async function loadConfigAsync(
   const filePath = resolve(repoPath, configPath ?? ".herodotus.toml");
   if (!existsSync(filePath)) return {};
 
-  const content = await Bun.file(filePath).text();
+  const content = await Deno.readTextFile(filePath);
   const toml = parseToml(content) as unknown as TomlConfig;
 
   const result: Partial<HerodotusConfig> = {};
