@@ -1,15 +1,20 @@
 # Herodotus
 
-> *"History is written by the victors."*
+> _"History is written by the victors."_
 
-A git history rewriter that makes your commit log look like it was written by a well-adjusted developer with healthy work habits.
+A git history rewriter that makes your commit log look like it was written by a
+well-adjusted developer with healthy work habits.
 
 ## What it does
 
-- **Rewrites authors** — Replaces all commit authors and committers with an identity of your choosing
-- **Fixes your schedule** — Redistributes commit timestamps into realistic working hours (no more 3 AM commits)
-- **Scrubs AI traces** — Strips `Co-Authored-By` trailers from Claude, Copilot, ChatGPT, and other AI assistants
-- **Preserves the narrative** — Keeps commit order, relative pacing, and human co-author credits intact
+- **Rewrites authors** — Replaces all commit authors and committers with an
+  identity of your choosing
+- **Fixes your schedule** — Redistributes commit timestamps into realistic
+  working hours (no more 3 AM commits)
+- **Scrubs AI traces** — Strips `Co-Authored-By` trailers from Claude, Copilot,
+  ChatGPT, and other AI assistants
+- **Preserves the narrative** — Keeps commit order, relative pacing, and human
+  co-author credits intact
 
 ## Quick start
 
@@ -46,7 +51,8 @@ timezone = "Europe/Bucharest"
 allowedDays = ["Sat", "Sun"]
 ```
 
-CLI flags override the config file. Without a config, Herodotus uses your `git config` identity and a 9-to-6 schedule.
+CLI flags override the config file. Without a config, Herodotus uses your
+`git config` identity and a 9-to-6 schedule.
 
 ## CLI reference
 
@@ -70,11 +76,17 @@ herodotus [options] [<repo-path>]
 
 ## How it works
 
-Herodotus pipes your branch through `git fast-export`, transforms the stream in memory, and writes it back with `git fast-import`. No shell-per-commit overhead, no Python dependency.
+Herodotus pipes your branch through `git fast-export`, transforms the stream in
+memory, and writes it back with `git fast-import`. No shell-per-commit overhead,
+no Python dependency.
 
-**Timestamps** are redistributed to preserve relative commit density while snapping everything into your configured work window. A seeded PRNG adds subtle jitter so the result doesn't look mechanical.
+**Timestamps** are redistributed to preserve relative commit density while
+snapping everything into your configured work window. A seeded PRNG adds subtle
+jitter so the result doesn't look mechanical.
 
-**Safety**: By default, Herodotus writes to a `herodotus/<branch>` branch, leaving your original history untouched. Use `--in-place` to rewrite directly (a backup ref is created automatically).
+**Safety**: By default, Herodotus writes to a `herodotus/<branch>` branch,
+leaving your original history untouched. Use `--in-place` to rewrite directly (a
+backup ref is created automatically).
 
 ## Build
 

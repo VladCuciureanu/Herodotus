@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from "jsr:@std/testing/bdd";
+import { afterEach, beforeEach, describe, it } from "jsr:@std/testing/bdd";
 import { expect } from "jsr:@std/expect";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,7 +14,11 @@ function git(args: string[], cwd: string): string {
     stderr: "piped",
   }).outputSync();
   if (result.code !== 0) {
-    throw new Error(`git ${args.join(" ")} failed: ${new TextDecoder().decode(result.stderr)}`);
+    throw new Error(
+      `git ${args.join(" ")} failed: ${
+        new TextDecoder().decode(result.stderr)
+      }`,
+    );
   }
   return new TextDecoder().decode(result.stdout).trim();
 }
@@ -31,20 +35,44 @@ function createTestRepo(): string {
 
   writeFile(join(dir, "file1.txt"), "file1\n");
   git(["add", "file1.txt"], dir);
-  git(["commit", "-m", "Initial commit\n\nCo-Authored-By: Claude <noreply@anthropic.com>", "--date", "2024-01-08T03:00:00+0000"], dir);
+  git([
+    "commit",
+    "-m",
+    "Initial commit\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+    "--date",
+    "2024-01-08T03:00:00+0000",
+  ], dir);
 
   writeFile(join(dir, "file2.txt"), "file2\n");
   git(["add", "file2.txt"], dir);
-  git(["commit", "-m", "Add feature\n\nCo-Authored-By: Alice <alice@example.com>", "--date", "2024-01-08T04:00:00+0000"], dir);
+  git([
+    "commit",
+    "-m",
+    "Add feature\n\nCo-Authored-By: Alice <alice@example.com>",
+    "--date",
+    "2024-01-08T04:00:00+0000",
+  ], dir);
 
   writeFile(join(dir, "file3.txt"), "file3\n");
   git(["add", "file3.txt"], dir);
-  git(["commit", "-m", "Fix bug\n\nCo-Authored-By: GitHub Copilot <noreply@github.com>", "--date", "2024-01-09T02:30:00+0000"], dir);
+  git([
+    "commit",
+    "-m",
+    "Fix bug\n\nCo-Authored-By: GitHub Copilot <noreply@github.com>",
+    "--date",
+    "2024-01-09T02:30:00+0000",
+  ], dir);
 
   return dir;
 }
 
-const schedule = { start: 9 * 60, end: 18 * 60, timezone: "UTC", allowedDays: [1, 2, 3, 4, 5], anchor: { type: "start" as const, date: new Date("2024-01-08T09:00:00Z") } };
+const schedule = {
+  start: 9 * 60,
+  end: 18 * 60,
+  timezone: "UTC",
+  allowedDays: [1, 2, 3, 4, 5],
+  anchor: { type: "start" as const, date: new Date("2024-01-08T09:00:00Z") },
+};
 
 describe("rewriter", () => {
   let repoDir: string;
@@ -93,7 +121,10 @@ describe("rewriter", () => {
     const branches = git(["branch"], repoDir);
     expect(branches).toContain("herodotus/main");
 
-    const author = git(["log", "--format=%an <%ae>", "herodotus/main"], repoDir);
+    const author = git(
+      ["log", "--format=%an <%ae>", "herodotus/main"],
+      repoDir,
+    );
     const lines = author.split("\n");
     for (const line of lines) {
       expect(line).toBe("New Author <new@example.com>");

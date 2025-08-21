@@ -1,5 +1,5 @@
 import type { ScheduleConfig } from "./types.ts";
-import { seededRandom, gaussianRandom } from "./random.ts";
+import { gaussianRandom, seededRandom } from "./random.ts";
 
 const MIN_GAP_MS = 2 * 60 * 1000; // 2 minutes
 const MAX_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -32,7 +32,13 @@ function getDayOfWeekInTz(date: Date, tz: string): number {
 
   const day = parts.find((p) => p.type === "weekday")!.value;
   const map: Record<string, number> = {
-    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
   };
   return map[day];
 }
@@ -235,6 +241,8 @@ export function redistributeTimestamps(
 
   return buildTimelineForwards(
     Math.floor(schedule.anchor.date.getTime() / 1000),
-    clampedGaps, schedule, rng,
+    clampedGaps,
+    schedule,
+    rng,
   );
 }

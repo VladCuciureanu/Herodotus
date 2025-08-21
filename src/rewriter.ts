@@ -1,4 +1,4 @@
-import type { HerodotusConfig, Identity, CommitInfo } from "./types.ts";
+import type { CommitInfo, HerodotusConfig, Identity } from "./types.ts";
 import { stripAiCoAuthors } from "./ai-authors.ts";
 import { capitalizeConventionalCommit } from "./commit-message.ts";
 import { createIdentityPicker } from "./identity.ts";
@@ -17,9 +17,14 @@ interface ParsedBlob {
   lines: string[];
 }
 
-type FastExportEntry = { type: "commit"; commit: ParsedCommit } | { type: "other"; lines: string[] };
+type FastExportEntry = { type: "commit"; commit: ParsedCommit } | {
+  type: "other";
+  lines: string[];
+};
 
-function parseAuthorLine(line: string): { prefix: string; identity: Identity; timestamp: string } {
+function parseAuthorLine(
+  line: string,
+): { prefix: string; identity: Identity; timestamp: string } {
   // Format: "author Name <email> timestamp tz" or "committer Name <email> timestamp tz"
   const match = line.match(/^(author|committer)\s+(.+?)\s+<([^>]+)>\s+(.+)$/);
   if (!match) throw new Error(`Cannot parse author/committer line: ${line}`);
@@ -30,7 +35,11 @@ function parseAuthorLine(line: string): { prefix: string; identity: Identity; ti
   };
 }
 
-function formatAuthorLine(prefix: string, identity: Identity, timestamp: string): string {
+function formatAuthorLine(
+  prefix: string,
+  identity: Identity,
+  timestamp: string,
+): string {
   return `${prefix} ${identity.name} <${identity.email}> ${timestamp}`;
 }
 
@@ -53,7 +62,8 @@ function getTzOffset(epoch: number, tz: string): string {
     timeZoneName: "shortOffset",
   });
   const parts = formatter.formatToParts(date);
-  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "+00:00";
+  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ??
+    "+00:00";
 
   // Convert "GMT+2" or "GMT-5:30" to "+0200" or "-0530"
   if (tzPart === "GMT") return "+0000";
@@ -94,7 +104,10 @@ function parseFastExport(input: string): FastExportEntry[] {
   return entries;
 }
 
-function parseCommitBlock(lines: string[], start: number): { parsed: ParsedCommit; nextIndex: number } {
+function parseCommitBlock(
+  lines: string[],
+  start: number,
+): { parsed: ParsedCommit; nextIndex: number } {
   let i = start;
   const headerLines: string[] = [];
   let authorLine = "";
@@ -139,7 +152,11 @@ function parseCommitBlock(lines: string[], start: number): { parsed: ParsedCommi
 
   // Read body lines (file operations, from, merge that come after data)
   const bodyLines: string[] = [];
-  while (i < lines.length && lines[i] !== "" && !lines[i].startsWith("commit ") && !lines[i].startsWith("blob") && !lines[i].startsWith("reset ") && !lines[i].startsWith("tag ")) {
+  while (
+    i < lines.length && lines[i] !== "" && !lines[i].startsWith("commit ") &&
+    !lines[i].startsWith("blob") && !lines[i].startsWith("reset ") &&
+    !lines[i].startsWith("tag ")
+  ) {
     bodyLines.push(lines[i]);
     i++;
   }
@@ -151,7 +168,14 @@ function parseCommitBlock(lines: string[], start: number): { parsed: ParsedCommi
   }
 
   return {
-    parsed: { headerLines, authorLine, committerLine, message, dataLength, bodyLines },
+    parsed: {
+      headerLines,
+      authorLine,
+      committerLine,
+      message,
+      dataLength,
+      bodyLines,
+    },
     nextIndex: i,
   };
 }
@@ -195,14 +219,20 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   }).outputSync();
 
   if (fullExportProc.code !== 0) {
-    throw new Error(`git fast-export failed: ${new TextDecoder().decode(fullExportProc.stderr)}`);
+    throw new Error(
+      `git fast-export failed: ${
+        new TextDecoder().decode(fullExportProc.stderr)
+      }`,
+    );
   }
 
   const exportData = new TextDecoder().decode(fullExportProc.stdout);
   const entries = parseFastExport(exportData);
 
   // Collect commit timestamps for redistribution
-  const commits = entries.filter((e) => e.type === "commit") as Array<{ type: "commit"; commit: ParsedCommit }>;
+  const commits = entries.filter((e) => e.type === "commit") as Array<
+    { type: "commit"; commit: ParsedCommit }
+  >;
 
   const originalTimestamps = commits.map((e) => {
     const parsed = parseAuthorLine(e.commit.authorLine);
@@ -211,11 +241,16 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
 
   // Count file changes per commit (M, D, R, C lines in bodyLines)
   const changeCounts = commits.map((e) =>
-    e.commit.bodyLines.filter((l) => /^[MDRC] /.test(l)).length,
+    e.commit.bodyLines.filter((l) => /^[MDRC] /.test(l)).length
   );
 
   // Redistribute timestamps
-  const newTimestamps = redistributeTimestamps(originalTimestamps, schedule, seed, changeCounts);
+  const newTimestamps = redistributeTimestamps(
+    originalTimestamps,
+    schedule,
+    seed,
+    changeCounts,
+  );
 
   // Create identity picker
   const pickIdentity = createIdentityPicker(config.identities, seed);

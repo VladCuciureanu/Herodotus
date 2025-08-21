@@ -1,7 +1,14 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import type { HerodotusConfig, Identity } from "./types.ts";
-import { loadConfigAsync, buildConfig, parseDays, parseAnchor, parseTime, DEFAULT_ALLOWED_DAYS } from "./config.ts";
+import {
+  buildConfig,
+  DEFAULT_ALLOWED_DAYS,
+  loadConfigAsync,
+  parseAnchor,
+  parseDays,
+  parseTime,
+} from "./config.ts";
 
 function parseIdentity(s: string): Identity {
   const colonIdx = s.lastIndexOf(":");
@@ -58,16 +65,23 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
   if (values["dry-run"]) cliArgs.dryRun = true;
   if (values.seed) {
     const seed = parseInt(values.seed, 10);
-    if (!Number.isFinite(seed) || seed < 0) throw new Error(`Invalid seed: "${values.seed}". Must be a non-negative integer`);
+    if (!Number.isFinite(seed) || seed < 0) {
+      throw new Error(
+        `Invalid seed: "${values.seed}". Must be a non-negative integer`,
+      );
+    }
     cliArgs.seed = seed;
   }
 
-  if (values.start || values.end || values.timezone || values["allowed-days"] || values["start-date"] || values["end-date"]) {
+  if (
+    values.start || values.end || values.timezone || values["allowed-days"] ||
+    values["start-date"] || values["end-date"]
+  ) {
     cliArgs.schedule = {
       start: values.start ? parseTime(values.start) : 9 * 60,
       end: values.end ? parseTime(values.end) : 18 * 60,
-      timezone:
-        values.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone: values.timezone ??
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
       allowedDays: values["allowed-days"]
         ? parseDays(values["allowed-days"].split(","))
         : DEFAULT_ALLOWED_DAYS,
@@ -79,7 +93,8 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
 }
 
 function printUsage(): void {
-  console.log(`herodotus — rewrite git history with plausible identities & timestamps
+  console.log(
+    `herodotus — rewrite git history with plausible identities & timestamps
 
 Usage: herodotus [options] [<repo-path>]
        herodotus init [<repo-path>]
@@ -97,5 +112,6 @@ Options:
   --in-place                    Rewrite branch in-place (default: new branch)
   --dry-run                     Show changes without modifying
   --seed <number>               PRNG seed for reproducibility
-  -h, --help                    Show this help`);
+  -h, --help                    Show this help`,
+  );
 }

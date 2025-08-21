@@ -2,20 +2,34 @@ import { parse as parseToml } from "smol-toml";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { HerodotusConfig, ScheduleConfig } from "./types.ts";
-import { getDefaultIdentity, getCurrentBranch } from "./utils.ts";
+import { getCurrentBranch, getDefaultIdentity } from "./utils.ts";
 
 export function parseTime(s: string): number {
   const match = s.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) throw new Error(`Invalid time format: "${s}". Expected "HH:MM"`);
   const h = parseInt(match[1]);
   const m = parseInt(match[2]);
-  if (h > 23 || m > 59) throw new Error(`Invalid time: "${s}". Hours must be 0-23, minutes 0-59`);
+  if (h > 23 || m > 59) {
+    throw new Error(`Invalid time: "${s}". Hours must be 0-23, minutes 0-59`);
+  }
   return h * 60 + m;
 }
 
 const DAY_MAP: Record<string, number> = {
-  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
-  sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
 };
 
 export const DEFAULT_ALLOWED_DAYS = [1, 2, 3, 4, 5, 6]; // Mon-Sat
@@ -25,11 +39,15 @@ export function parseAnchor(
   endDate?: string,
 ): ScheduleConfig["anchor"] {
   if (startDate && endDate) {
-    throw new Error("Cannot specify both --start-date and --end-date. Choose one.");
+    throw new Error(
+      "Cannot specify both --start-date and --end-date. Choose one.",
+    );
   }
   if (startDate) {
     const d = new Date(startDate);
-    if (isNaN(d.getTime())) throw new Error(`Invalid start date: "${startDate}"`);
+    if (isNaN(d.getTime())) {
+      throw new Error(`Invalid start date: "${startDate}"`);
+    }
     return { type: "start", date: d };
   }
   if (endDate) {
@@ -43,7 +61,9 @@ export function parseAnchor(
 export function parseDays(input: string[]): number[] {
   return input.map((d) => {
     const n = DAY_MAP[d.toLowerCase()];
-    if (n === undefined) throw new Error(`Invalid day: "${d}". Use Mon, Tue, etc.`);
+    if (n === undefined) {
+      throw new Error(`Invalid day: "${d}". Use Mon, Tue, etc.`);
+    }
     return n;
   });
 }
@@ -83,8 +103,11 @@ export async function loadConfigAsync(
     result.schedule = {
       start: toml.schedule.start ? parseTime(toml.schedule.start) : 9 * 60,
       end: toml.schedule.end ? parseTime(toml.schedule.end) : 18 * 60,
-      timezone: toml.schedule.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-      allowedDays: toml.schedule.allowedDays ? parseDays(toml.schedule.allowedDays) : DEFAULT_ALLOWED_DAYS,
+      timezone: toml.schedule.timezone ??
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+      allowedDays: toml.schedule.allowedDays
+        ? parseDays(toml.schedule.allowedDays)
+        : DEFAULT_ALLOWED_DAYS,
       anchor: parseAnchor(toml.schedule.startDate, toml.schedule.endDate),
     };
   }
@@ -107,8 +130,7 @@ export function buildConfig(
   fileConfig: Partial<HerodotusConfig>,
   repoPath: string,
 ): HerodotusConfig {
-  const identities =
-    cliArgs.identities ??
+  const identities = cliArgs.identities ??
     fileConfig.identities ?? [getDefaultIdentity(repoPath)];
 
   const schedule: ScheduleConfig = {
@@ -117,8 +139,8 @@ export function buildConfig(
     ...cliArgs.schedule,
   };
 
-  const branch =
-    cliArgs.branch ?? fileConfig.branch ?? getCurrentBranch(repoPath);
+  const branch = cliArgs.branch ?? fileConfig.branch ??
+    getCurrentBranch(repoPath);
 
   return {
     identities,
