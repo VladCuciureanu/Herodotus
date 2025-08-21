@@ -167,12 +167,14 @@ export function redistributeTimestamps(
     current = next;
   }
 
-  // Clamp to current time if future dates are disallowed
-  if (!schedule.futureDates) {
+  // Shift entire timeline back so the last commit is at or before now
+  if (!schedule.futureDates && result.length > 0) {
     const now = Math.floor(Date.now() / 1000);
-    for (let i = 0; i < result.length; i++) {
-      if (result[i] > now) {
-        result[i] = now;
+    const last = result[result.length - 1];
+    if (last > now) {
+      const shift = last - now;
+      for (let i = 0; i < result.length; i++) {
+        result[i] -= shift;
       }
     }
   }
