@@ -31,3 +31,4 @@ deno.lock
 
 # macOS
 .DS_Store
+.herodotus.toml
