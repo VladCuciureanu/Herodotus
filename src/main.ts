@@ -1,10 +1,20 @@
 #!/usr/bin/env bun
 import { parseCli } from "./cli";
+import { runInit } from "./init";
 import { rewrite } from "./rewriter";
 import { isWorkingTreeClean, branchExists } from "./utils";
+import { resolve } from "path";
 
 async function main() {
-  const config = await parseCli(process.argv.slice(2));
+  const args = process.argv.slice(2);
+
+  if (args[0] === "init") {
+    const repoPath = resolve(args[1] ?? ".");
+    await runInit(repoPath);
+    return;
+  }
+
+  const config = await parseCli(args);
 
   // Safety checks
   if (!config.dryRun && !isWorkingTreeClean(config.repoPath)) {

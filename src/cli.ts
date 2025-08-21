@@ -84,6 +84,7 @@ function printUsage(): void {
   console.log(`herodotus — rewrite git history with plausible identities & timestamps
 
 Usage: herodotus [options] [<repo-path>]
+       herodotus init [<repo-path>]
 
 Options:
   -i, --identity <name:email>  Identity to use (repeatable)
