@@ -87,6 +87,40 @@ function advanceToWorkSlot(date: Date, schedule: ScheduleConfig): Date {
 }
 
 /**
+ * Walk backwards from a Date to find the most recent valid work slot.
+ */
+function retreatToWorkSlot(date: Date, schedule: ScheduleConfig): Date {
+  let d = new Date(date.getTime());
+
+  for (let day = 0; day < 14; day++) {
+    const dow = getDayOfWeekInTz(d, schedule.timezone);
+    const isWeekend = dow === 0 || dow === 6;
+    const dayAllowed =
+      (isWeekend && schedule.weekends) || (!isWeekend && schedule.workdays);
+
+    if (dayAllowed) {
+      const mins = getMinutesInTz(d, schedule.timezone);
+      if (mins >= schedule.start && mins < schedule.end) {
+        return d;
+      }
+      if (mins >= schedule.end) {
+        // Past end of work: snap to end - 1 min
+        const diff = (mins - schedule.end + 1) * 60 * 1000;
+        return new Date(d.getTime() - diff);
+      }
+    }
+
+    // Jump to previous day at end of work hours
+    const mins = getMinutesInTz(d, schedule.timezone);
+    const minsFromMidnight = mins;
+    const prevDayEnd = 24 * 60 - schedule.end + minsFromMidnight;
+    d = new Date(d.getTime() - (prevDayEnd + 1) * 60 * 1000);
+  }
+
+  return d;
+}
+
+/**
  * Snap a Date to the start of the work day if it's before work hours,
  * or to the next work day start if it's after.
  */
@@ -167,12 +201,14 @@ export function redistributeTimestamps(
     current = next;
   }
 
-  // Shift entire timeline back so the last commit is at or before now
+  // Shift entire timeline back so the last commit lands on a valid past slot
   if (!schedule.futureDates && result.length > 0) {
     const now = Math.floor(Date.now() / 1000);
     const last = result[result.length - 1];
     if (last > now) {
-      const shift = last - now;
+      // Find the latest valid work slot at or before now
+      const anchor = retreatToWorkSlot(new Date(now * 1000), schedule);
+      const shift = last - Math.floor(anchor.getTime() / 1000);
       for (let i = 0; i < result.length; i++) {
         result[i] -= shift;
       }
