@@ -8,6 +8,7 @@ const schedule: ScheduleConfig = {
   timezone: "UTC",
   workdays: true,
   weekends: false,
+  futureDates: true,
 };
 
 describe("redistributeTimestamps", () => {

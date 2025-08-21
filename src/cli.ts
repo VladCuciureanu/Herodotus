@@ -35,6 +35,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
       workdays: { type: "boolean" },
       "no-workdays": { type: "boolean" },
       weekends: { type: "boolean" },
+      "future-dates": { type: "boolean" },
       "in-place": { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
       seed: { type: "string" },
@@ -67,7 +68,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
   const workdaysExplicit = values.workdays !== undefined || values["no-workdays"] !== undefined;
   const resolvedWorkdays = values["no-workdays"] ? false : values.workdays ?? undefined;
 
-  if (values.start || values.end || values.timezone || workdaysExplicit || values.weekends) {
+  if (values.start || values.end || values.timezone || workdaysExplicit || values.weekends || values["future-dates"] !== undefined) {
     cliArgs.schedule = {
       start: values.start ? parseTime(values.start) : 9 * 60,
       end: values.end ? parseTime(values.end) : 18 * 60,
@@ -75,6 +76,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
         values.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       workdays: resolvedWorkdays ?? true,
       weekends: values.weekends ?? false,
+      futureDates: values["future-dates"] ?? false,
     };
   }
 
@@ -95,6 +97,7 @@ Options:
   --timezone <tz>               IANA timezone (default: system)
   --no-workdays                  Disallow workday commits
   --weekends                    Allow weekend commits
+  --future-dates                Allow commits with future dates
   --in-place                    Rewrite branch in-place (default: new branch)
   --dry-run                     Show changes without modifying
   --seed <number>               PRNG seed for reproducibility

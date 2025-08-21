@@ -9,6 +9,7 @@ export interface ScheduleConfig {
   timezone: string;
   workdays: boolean;
   weekends: boolean;
+  futureDates: boolean;
 }
 
 export interface HerodotusConfig {

@@ -17,6 +17,7 @@ interface TomlConfig {
     timezone?: string;
     workdays?: boolean;
     weekends?: boolean;
+    futureDates?: boolean;
   };
 }
 
@@ -59,6 +60,7 @@ export async function loadConfigAsync(
       timezone: toml.schedule.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       workdays: toml.schedule.workdays ?? true,
       weekends: toml.schedule.weekends ?? false,
+      futureDates: toml.schedule.futureDates ?? false,
     };
   }
 
@@ -72,6 +74,7 @@ export function buildDefaultSchedule(): ScheduleConfig {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     workdays: true,
     weekends: false,
+    futureDates: false,
   };
 }
 

@@ -167,5 +167,15 @@ export function redistributeTimestamps(
     current = next;
   }
 
+  // Clamp to current time if future dates are disallowed
+  if (!schedule.futureDates) {
+    const now = Math.floor(Date.now() / 1000);
+    for (let i = 0; i < result.length; i++) {
+      if (result[i] > now) {
+        result[i] = now;
+      }
+    }
+  }
+
   return result;
 }
