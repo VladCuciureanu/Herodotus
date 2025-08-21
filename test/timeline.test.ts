@@ -6,8 +6,7 @@ const schedule: ScheduleConfig = {
   start: 9 * 60, // 09:00
   end: 18 * 60, // 18:00
   timezone: "UTC",
-  workdays: true,
-  weekends: false,
+  allowedDays: [1, 2, 3, 4, 5],
   futureDates: true,
 };
 

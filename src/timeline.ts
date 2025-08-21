@@ -41,9 +41,7 @@ function getDayOfWeekInTz(date: Date, tz: string): number {
  */
 function isInWorkWindow(date: Date, schedule: ScheduleConfig): boolean {
   const dow = getDayOfWeekInTz(date, schedule.timezone);
-  const isWeekend = dow === 0 || dow === 6;
-  if (!schedule.weekends && isWeekend) return false;
-  if (!schedule.workdays && !isWeekend) return false;
+  if (!schedule.allowedDays.includes(dow)) return false;
 
   const mins = getMinutesInTz(date, schedule.timezone);
   return mins >= schedule.start && mins < schedule.end;
@@ -59,14 +57,10 @@ function advanceToWorkSlot(date: Date, schedule: ScheduleConfig): Date {
   // Try up to 14 days to find a valid slot
   for (let day = 0; day < 14; day++) {
     const dow = getDayOfWeekInTz(d, schedule.timezone);
-    const isWeekend = dow === 0 || dow === 6;
-    const dayAllowed =
-      (isWeekend && schedule.weekends) || (!isWeekend && schedule.workdays);
 
-    if (dayAllowed) {
+    if (schedule.allowedDays.includes(dow)) {
       const mins = getMinutesInTz(d, schedule.timezone);
       if (mins < schedule.end) {
-        // Snap to start if before work hours
         if (mins < schedule.start) {
           d = new Date(d.getTime() + (schedule.start - mins) * 60 * 1000);
         }
@@ -94,17 +88,13 @@ function retreatToWorkSlot(date: Date, schedule: ScheduleConfig): Date {
 
   for (let day = 0; day < 14; day++) {
     const dow = getDayOfWeekInTz(d, schedule.timezone);
-    const isWeekend = dow === 0 || dow === 6;
-    const dayAllowed =
-      (isWeekend && schedule.weekends) || (!isWeekend && schedule.workdays);
 
-    if (dayAllowed) {
+    if (schedule.allowedDays.includes(dow)) {
       const mins = getMinutesInTz(d, schedule.timezone);
       if (mins >= schedule.start && mins < schedule.end) {
         return d;
       }
       if (mins >= schedule.end) {
-        // Past end of work: snap to end - 1 min
         const diff = (mins - schedule.end + 1) * 60 * 1000;
         return new Date(d.getTime() - diff);
       }

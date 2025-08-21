@@ -40,7 +40,7 @@ email = "you@example.com"
 start = "09:00"
 end = "18:00"
 timezone = "Europe/Bucharest"
-weekends = true
+allowedDays = ["Sat", "Sun"]
 ```
 
 CLI flags override the config file. Without a config, Herodotus uses your `git config` identity and a 9-to-6 schedule.
@@ -56,7 +56,8 @@ herodotus [options] [<repo-path>]
       --start <HH:MM>           Workday start (default: 09:00)
       --end <HH:MM>             Workday end (default: 18:00)
       --timezone <tz>           IANA timezone (default: system)
-      --weekends                Allow weekend commits
+  -d, --allowed-days <days>     Comma-separated days (default: Mon-Sat)
+      --future-dates            Allow commits with future dates
       --in-place                Rewrite branch in-place with backup
       --dry-run                 Show changes without modifying
       --seed <number>           PRNG seed for reproducible output

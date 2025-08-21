@@ -7,8 +7,7 @@ export interface ScheduleConfig {
   start: number; // minutes from midnight
   end: number;
   timezone: string;
-  workdays: boolean;
-  weekends: boolean;
+  allowedDays: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
   futureDates: boolean;
 }
 

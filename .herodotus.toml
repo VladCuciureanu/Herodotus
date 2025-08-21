@@ -6,6 +6,5 @@ email = "vlad@cuciureanu.net"
 start = "09:00"
 end = "18:00"
 timezone = "Europe/Bucharest"
-workdays = false
-weekends = true
+allowedDays = ["Sat", "Sun"]
 futureDates = false

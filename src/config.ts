@@ -9,14 +9,28 @@ function parseTime(s: string): number {
   return h * 60 + m;
 }
 
+const DAY_MAP: Record<string, number> = {
+  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+  sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+};
+
+const DEFAULT_ALLOWED_DAYS = [1, 2, 3, 4, 5, 6]; // Mon-Sat
+
+export function parseDays(input: string[]): number[] {
+  return input.map((d) => {
+    const n = DAY_MAP[d.toLowerCase()];
+    if (n === undefined) throw new Error(`Invalid day: "${d}". Use Mon, Tue, etc.`);
+    return n;
+  });
+}
+
 interface TomlConfig {
   identity?: Array<{ name: string; email: string }>;
   schedule?: {
     start?: string;
     end?: string;
     timezone?: string;
-    workdays?: boolean;
-    weekends?: boolean;
+    allowedDays?: string[];
     futureDates?: boolean;
   };
 }
@@ -58,8 +72,7 @@ export async function loadConfigAsync(
       start: toml.schedule.start ? parseTime(toml.schedule.start) : 9 * 60,
       end: toml.schedule.end ? parseTime(toml.schedule.end) : 18 * 60,
       timezone: toml.schedule.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-      workdays: toml.schedule.workdays ?? true,
-      weekends: toml.schedule.weekends ?? false,
+      allowedDays: toml.schedule.allowedDays ? parseDays(toml.schedule.allowedDays) : DEFAULT_ALLOWED_DAYS,
       futureDates: toml.schedule.futureDates ?? false,
     };
   }
@@ -72,8 +85,7 @@ export function buildDefaultSchedule(): ScheduleConfig {
     start: 9 * 60,
     end: 18 * 60,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    workdays: true,
-    weekends: false,
+    allowedDays: DEFAULT_ALLOWED_DAYS,
     futureDates: false,
   };
 }
