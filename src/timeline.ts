@@ -136,6 +136,71 @@ function snapToWorkStart(date: Date, schedule: ScheduleConfig): Date {
 }
 
 /**
+ * Build a timeline forwards: place first commit, then advance by each gap.
+ */
+function buildTimelineForwards(
+  startEpoch: number,
+  gaps: number[],
+  schedule: ScheduleConfig,
+  rng: () => number,
+): number[] {
+  const result: number[] = [];
+  let current = advanceToWorkSlot(new Date(startEpoch * 1000), schedule);
+  result.push(Math.floor(current.getTime() / 1000));
+
+  for (const gap of gaps) {
+    let next = new Date(current.getTime() + gap);
+    if (!isInWorkWindow(next, schedule)) {
+      next = advanceToWorkSlot(next, schedule);
+      const offsetMs = Math.floor(rng() * 30 * 60 * 1000);
+      next = new Date(next.getTime() + offsetMs);
+      if (!isInWorkWindow(next, schedule)) {
+        next = advanceToWorkSlot(next, schedule);
+      }
+    }
+    result.push(Math.floor(next.getTime() / 1000));
+    current = next;
+  }
+
+  return result;
+}
+
+/**
+ * Build a timeline backwards from now: place last commit on the most recent
+ * valid slot, then walk backwards placing each earlier commit on a valid slot.
+ */
+function buildTimelineBackwards(
+  gaps: number[],
+  schedule: ScheduleConfig,
+  rng: () => number,
+): number[] {
+  const now = new Date(Date.now());
+  const result: number[] = new Array(gaps.length + 1);
+
+  // Place last commit at the latest valid slot at or before now
+  let current = retreatToWorkSlot(now, schedule);
+  result[gaps.length] = Math.floor(current.getTime() / 1000);
+
+  // Walk backwards through gaps
+  for (let i = gaps.length - 1; i >= 0; i--) {
+    let prev = new Date(current.getTime() - gaps[i]);
+    if (!isInWorkWindow(prev, schedule)) {
+      prev = retreatToWorkSlot(prev, schedule);
+      // Subtract a small random offset to avoid always landing at slot boundary
+      const offsetMs = Math.floor(rng() * 20 * 60 * 1000);
+      prev = new Date(prev.getTime() - offsetMs);
+      if (!isInWorkWindow(prev, schedule)) {
+        prev = retreatToWorkSlot(prev, schedule);
+      }
+    }
+    result[i] = Math.floor(prev.getTime() / 1000);
+    current = prev;
+  }
+
+  return result;
+}
+
+/**
  * Redistribute an array of unix timestamps (seconds) into realistic work hours.
  * Returns new timestamps in the same order.
  */
@@ -163,43 +228,11 @@ export function redistributeTimestamps(
     clampedGaps.push(Math.max(MIN_GAP_MS, clamped + jitter));
   }
 
-  // Build new timeline
-  const result: number[] = [];
-  let current = advanceToWorkSlot(new Date(timestamps[0] * 1000), schedule);
-  result.push(Math.floor(current.getTime() / 1000));
-
-  for (let i = 0; i < clampedGaps.length; i++) {
-    let next = new Date(current.getTime() + clampedGaps[i]);
-
-    // If we've gone past end of work day, advance to next work slot
-    if (!isInWorkWindow(next, schedule)) {
-      next = advanceToWorkSlot(next, schedule);
-      // Add a small random offset so we don't always start exactly at work start
-      const offsetMs = Math.floor(rng() * 30 * 60 * 1000); // 0-30 min
-      next = new Date(next.getTime() + offsetMs);
-      // Re-check after offset
-      if (!isInWorkWindow(next, schedule)) {
-        next = advanceToWorkSlot(next, schedule);
-      }
-    }
-
-    result.push(Math.floor(next.getTime() / 1000));
-    current = next;
+  if (!schedule.futureDates) {
+    // Build timeline backwards from now so every commit lands on a valid day
+    return buildTimelineBackwards(clampedGaps, schedule, rng);
   }
 
-  // Shift entire timeline back so the last commit lands on a valid past slot
-  if (!schedule.futureDates && result.length > 0) {
-    const now = Math.floor(Date.now() / 1000);
-    const last = result[result.length - 1];
-    if (last > now) {
-      // Find the latest valid work slot at or before now
-      const anchor = retreatToWorkSlot(new Date(now * 1000), schedule);
-      const shift = last - Math.floor(anchor.getTime() / 1000);
-      for (let i = 0; i < result.length; i++) {
-        result[i] -= shift;
-      }
-    }
-  }
-
-  return result;
+  // Build timeline forwards from the first commit's date
+  return buildTimelineForwards(timestamps[0], clampedGaps, schedule, rng);
 }
