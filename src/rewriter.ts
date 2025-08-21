@@ -4,34 +4,19 @@ import { capitalizeConventionalCommit } from "./commit-message.ts";
 import { createIdentityPicker } from "./identity.ts";
 import { redistributeTimestamps } from "./timeline.ts";
 
-interface ParsedCommit {
-  headerLines: string[]; // lines before the data section (commit, mark, author, committer, from, merge)
-  authorLine: string;
-  committerLine: string;
-  message: string;
-  dataLength: number;
-  bodyLines: string[]; // lines after the data section (file ops, blank lines)
-}
-
-interface ParsedBlob {
-  lines: string[];
-}
-
-type FastExportEntry = { type: "commit"; commit: ParsedCommit } | {
-  type: "other";
-  lines: string[];
-};
+const LF = 0x0A; // '\n'
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 function parseAuthorLine(
   line: string,
 ): { prefix: string; identity: Identity; timestamp: string } {
-  // Format: "author Name <email> timestamp tz" or "committer Name <email> timestamp tz"
   const match = line.match(/^(author|committer)\s+(.+?)\s+<([^>]+)>\s+(.+)$/);
   if (!match) throw new Error(`Cannot parse author/committer line: ${line}`);
   return {
     prefix: match[1],
     identity: { name: match[2], email: match[3] },
-    timestamp: match[4], // "epoch tz"
+    timestamp: match[4],
   };
 }
 
@@ -44,7 +29,6 @@ function formatAuthorLine(
 }
 
 function parseTimestamp(ts: string): number {
-  // "1616000000 +0200" -> 1616000000
   return parseInt(ts.split(" ")[0]);
 }
 
@@ -52,9 +36,6 @@ function formatTimestamp(epoch: number, tzOffset: string): string {
   return `${epoch} ${tzOffset}`;
 }
 
-/**
- * Compute timezone offset string for a given IANA timezone at a given epoch.
- */
 function getTzOffset(epoch: number, tz: string): string {
   const date = new Date(epoch * 1000);
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -65,7 +46,6 @@ function getTzOffset(epoch: number, tz: string): string {
   const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ??
     "+00:00";
 
-  // Convert "GMT+2" or "GMT-5:30" to "+0200" or "-0530"
   if (tzPart === "GMT") return "+0000";
   const m = tzPart.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
   if (!m) return "+0000";
@@ -76,132 +56,248 @@ function getTzOffset(epoch: number, tz: string): string {
 }
 
 /**
- * Parse the fast-export stream into entries.
+ * Find next LF in a Uint8Array starting from offset. Returns -1 if not found.
  */
-function parseFastExport(input: string): FastExportEntry[] {
-  const lines = input.split("\n");
-  const entries: FastExportEntry[] = [];
-  let i = 0;
-
-  while (i < lines.length) {
-    if (lines[i].startsWith("commit ")) {
-      const commit = parseCommitBlock(lines, i);
-      entries.push({ type: "commit", commit: commit.parsed });
-      i = commit.nextIndex;
-    } else {
-      // Collect non-commit lines (blobs, resets, tags, etc.)
-      const otherLines: string[] = [];
-      while (i < lines.length && !lines[i].startsWith("commit ")) {
-        otherLines.push(lines[i]);
-        i++;
-      }
-      if (otherLines.length > 0) {
-        entries.push({ type: "other", lines: otherLines });
-      }
-    }
+function findLF(buf: Uint8Array, start: number): number {
+  for (let i = start; i < buf.length; i++) {
+    if (buf[i] === LF) return i;
   }
-
-  return entries;
+  return -1;
 }
 
-function parseCommitBlock(
-  lines: string[],
-  start: number,
-): { parsed: ParsedCommit; nextIndex: number } {
-  let i = start;
-  const headerLines: string[] = [];
-  let authorLine = "";
-  let committerLine = "";
-
-  // Read header lines until we hit "data"
-  while (i < lines.length && !lines[i].startsWith("data ")) {
-    if (lines[i].startsWith("author ")) {
-      authorLine = lines[i];
-    } else if (lines[i].startsWith("committer ")) {
-      committerLine = lines[i];
-    }
-    headerLines.push(lines[i]);
-    i++;
+/**
+ * Read one line from buf starting at offset. Returns the line (without LF) and the next offset.
+ */
+function readLine(
+  buf: Uint8Array,
+  offset: number,
+): { line: string; next: number } {
+  const lfPos = findLF(buf, offset);
+  if (lfPos === -1) {
+    return { line: decoder.decode(buf.subarray(offset)), next: buf.length };
   }
-
-  // Parse data section
-  let message = "";
-  let dataLength = 0;
-  if (i < lines.length && lines[i].startsWith("data ")) {
-    dataLength = parseInt(lines[i].split(" ")[1]);
-    i++; // skip "data N" line
-
-    // Read exactly dataLength bytes from subsequent lines
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-    let bytesRead = 0;
-    const messageLines: string[] = [];
-    while (i < lines.length && bytesRead < dataLength) {
-      const line = lines[i];
-      messageLines.push(line);
-      bytesRead += encoder.encode(line).length + 1; // +1 for newline
-      i++;
-    }
-    message = messageLines.join("\n");
-    // Trim to exact byte length if needed
-    const messageBytes = encoder.encode(message);
-    if (messageBytes.length > dataLength) {
-      message = decoder.decode(messageBytes.subarray(0, dataLength));
-    }
-  }
-
-  // Read body lines (file operations, from, merge that come after data)
-  const bodyLines: string[] = [];
-  while (
-    i < lines.length && lines[i] !== "" && !lines[i].startsWith("commit ") &&
-    !lines[i].startsWith("blob") && !lines[i].startsWith("reset ") &&
-    !lines[i].startsWith("tag ")
-  ) {
-    bodyLines.push(lines[i]);
-    i++;
-  }
-
-  // Include trailing blank line if present
-  if (i < lines.length && lines[i] === "") {
-    bodyLines.push(lines[i]);
-    i++;
-  }
-
   return {
-    parsed: {
-      headerLines,
-      authorLine,
-      committerLine,
-      message,
-      dataLength,
-      bodyLines,
-    },
-    nextIndex: i,
+    line: decoder.decode(buf.subarray(offset, lfPos)),
+    next: lfPos + 1,
   };
 }
 
-function serializeCommit(commit: ParsedCommit): string {
-  const lines: string[] = [];
+/**
+ * Check if buf at offset starts with the given ASCII prefix.
+ */
+function startsWith(buf: Uint8Array, offset: number, prefix: string): boolean {
+  const prefixBytes = encoder.encode(prefix);
+  if (offset + prefixBytes.length > buf.length) return false;
+  for (let i = 0; i < prefixBytes.length; i++) {
+    if (buf[offset + i] !== prefixBytes[i]) return false;
+  }
+  return true;
+}
 
-  for (const line of commit.headerLines) {
-    if (line.startsWith("author ")) {
-      lines.push(commit.authorLine);
-    } else if (line.startsWith("committer ")) {
-      lines.push(commit.committerLine);
+interface CommitMeta {
+  authorLine: string;
+  committerLine: string;
+  message: string;
+  changeCount: number;
+}
+
+/**
+ * Binary-safe fast-export stream processor.
+ * Parses commits to extract metadata, but preserves all binary blob data untouched.
+ * Returns the commit metadata and a function to produce the modified stream.
+ */
+function parseFastExportBinary(
+  buf: Uint8Array,
+): {
+  commits: CommitMeta[];
+  rebuild: (modifications: CommitModification[]) => Uint8Array;
+} {
+  const commits: CommitMeta[] = [];
+  // Track commit regions for later replacement
+  const commitRegions: {
+    headerStart: number;
+    dataStart: number; // offset of "data N\n"
+    dataContentStart: number; // offset of message content after "data N\n"
+    dataLength: number; // N from "data N"
+    bodyStart: number; // offset after message content
+    bodyEnd: number; // end of commit block
+    authorLine: string;
+    committerLine: string;
+    message: string;
+    changeCount: number;
+  }[] = [];
+
+  let offset = 0;
+  while (offset < buf.length) {
+    if (startsWith(buf, offset, "commit ")) {
+      const headerStart = offset;
+      let authorLine = "";
+      let committerLine = "";
+
+      // Read header lines until "data "
+      while (offset < buf.length && !startsWith(buf, offset, "data ")) {
+        const { line, next } = readLine(buf, offset);
+        if (line.startsWith("author ")) authorLine = line;
+        else if (line.startsWith("committer ")) committerLine = line;
+        offset = next;
+      }
+
+      // Parse data section
+      let message = "";
+      let dataLength = 0;
+      let dataStart = offset;
+      let dataContentStart = offset;
+      if (startsWith(buf, offset, "data ")) {
+        const { line, next } = readLine(buf, offset);
+        dataLength = parseInt(line.split(" ")[1]);
+        dataStart = offset;
+        dataContentStart = next;
+        offset = next;
+
+        // Read exactly dataLength bytes as the message (commit messages are text)
+        const msgBytes = buf.subarray(offset, offset + dataLength);
+        message = decoder.decode(msgBytes);
+        offset += dataLength;
+
+        // Skip the LF after the data content if present
+        if (offset < buf.length && buf[offset] === LF) {
+          offset++;
+        }
+      }
+
+      const bodyStart = offset;
+
+      // Count file changes (M, D, R, C lines) and skip body
+      let changeCount = 0;
+      while (offset < buf.length) {
+        // Check for end of commit block
+        if (buf[offset] === LF) {
+          offset++;
+          break;
+        }
+        if (
+          startsWith(buf, offset, "commit ") ||
+          startsWith(buf, offset, "blob") ||
+          startsWith(buf, offset, "reset ") ||
+          startsWith(buf, offset, "tag ")
+        ) {
+          break;
+        }
+        const { line, next } = readLine(buf, offset);
+        if (/^[MDRC] /.test(line)) changeCount++;
+        offset = next;
+      }
+
+      const bodyEnd = offset;
+
+      commitRegions.push({
+        headerStart,
+        dataStart,
+        dataContentStart,
+        dataLength,
+        bodyStart,
+        bodyEnd,
+        authorLine,
+        committerLine,
+        message,
+        changeCount,
+      });
+
+      commits.push({ authorLine, committerLine, message, changeCount });
+    } else if (startsWith(buf, offset, "blob")) {
+      // Skip blob: read past header and data section (binary-safe)
+      const { next: afterBlob } = readLine(buf, offset);
+      offset = afterBlob;
+
+      // Read mark line if present
+      if (startsWith(buf, offset, "mark ")) {
+        const { next } = readLine(buf, offset);
+        offset = next;
+      }
+
+      // Read data section
+      if (startsWith(buf, offset, "data ")) {
+        const { line, next } = readLine(buf, offset);
+        const blobSize = parseInt(line.split(" ")[1]);
+        offset = next + blobSize;
+        // Skip trailing LF
+        if (offset < buf.length && buf[offset] === LF) {
+          offset++;
+        }
+      }
     } else {
-      lines.push(line);
+      // Other lines (reset, tag, etc.) - skip line by line
+      const { next } = readLine(buf, offset);
+      offset = next;
     }
   }
 
-  const msgBytes = new TextEncoder().encode(commit.message).length;
-  lines.push(`data ${msgBytes}`);
-  lines.push(commit.message);
+  const rebuild = (modifications: CommitModification[]): Uint8Array => {
+    // Build modified output by replacing commit headers in-place
+    const chunks: Uint8Array[] = [];
+    let lastEnd = 0;
 
-  for (const line of commit.bodyLines) {
-    lines.push(line);
-  }
+    for (let i = 0; i < commitRegions.length; i++) {
+      const region = commitRegions[i];
+      const mod = modifications[i];
 
-  return lines.join("\n");
+      // Copy everything before this commit's header unchanged
+      chunks.push(buf.subarray(lastEnd, region.headerStart));
+
+      // Build new header
+      const headerLines: string[] = [];
+      let scanOffset = region.headerStart;
+      while (scanOffset < region.dataStart) {
+        const { line, next } = readLine(buf, scanOffset);
+        if (line.startsWith("author ")) {
+          headerLines.push(mod.authorLine);
+        } else if (line.startsWith("committer ")) {
+          headerLines.push(mod.committerLine);
+        } else {
+          headerLines.push(line);
+        }
+        scanOffset = next;
+      }
+
+      // Write header
+      chunks.push(encoder.encode(headerLines.join("\n") + "\n"));
+
+      // Write new data section with modified message
+      const msgBytes = encoder.encode(mod.message);
+      chunks.push(encoder.encode(`data ${msgBytes.length}\n`));
+      chunks.push(msgBytes);
+      chunks.push(encoder.encode("\n"));
+
+      // Copy body unchanged (file ops)
+      chunks.push(buf.subarray(region.bodyStart, region.bodyEnd));
+
+      lastEnd = region.bodyEnd;
+    }
+
+    // Copy remaining data after last commit
+    if (lastEnd < buf.length) {
+      chunks.push(buf.subarray(lastEnd, buf.length));
+    }
+
+    // Concatenate all chunks
+    let totalLen = 0;
+    for (const c of chunks) totalLen += c.length;
+    const result = new Uint8Array(totalLen);
+    let pos = 0;
+    for (const c of chunks) {
+      result.set(c, pos);
+      pos += c.length;
+    }
+    return result;
+  };
+
+  return { commits, rebuild };
+}
+
+interface CommitModification {
+  authorLine: string;
+  committerLine: string;
+  message: string;
 }
 
 /**
@@ -210,7 +306,7 @@ function serializeCommit(commit: ParsedCommit): string {
 export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   const { repoPath, branch, schedule, seed } = config;
 
-  // Export
+  // Export (keep as raw bytes)
   const fullExportProc = new Deno.Command("git", {
     args: ["fast-export", branch],
     cwd: repoPath,
@@ -220,29 +316,19 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
 
   if (fullExportProc.code !== 0) {
     throw new Error(
-      `git fast-export failed: ${
-        new TextDecoder().decode(fullExportProc.stderr)
-      }`,
+      `git fast-export failed: ${decoder.decode(fullExportProc.stderr)}`,
     );
   }
 
-  const exportData = new TextDecoder().decode(fullExportProc.stdout);
-  const entries = parseFastExport(exportData);
+  const rawExport = fullExportProc.stdout;
+  const { commits, rebuild } = parseFastExportBinary(rawExport);
 
-  // Collect commit timestamps for redistribution
-  const commits = entries.filter((e) => e.type === "commit") as Array<
-    { type: "commit"; commit: ParsedCommit }
-  >;
-
-  const originalTimestamps = commits.map((e) => {
-    const parsed = parseAuthorLine(e.commit.authorLine);
+  const originalTimestamps = commits.map((c) => {
+    const parsed = parseAuthorLine(c.authorLine);
     return parseTimestamp(parsed.timestamp);
   });
 
-  // Count file changes per commit (M, D, R, C lines in bodyLines)
-  const changeCounts = commits.map((e) =>
-    e.commit.bodyLines.filter((l) => /^[MDRC] /.test(l)).length
-  );
+  const changeCounts = commits.map((c) => c.changeCount);
 
   // Redistribute timestamps
   const newTimestamps = redistributeTimestamps(
@@ -255,25 +341,30 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   // Create identity picker
   const pickIdentity = createIdentityPicker(config.identities, seed);
 
-  // Build change log for dry-run
+  // Build change log and modifications
   const changeLog: CommitInfo[] = [];
+  const modifications: CommitModification[] = [];
 
-  // Apply transformations
   for (let i = 0; i < commits.length; i++) {
-    const commit = commits[i].commit;
+    const commit = commits[i];
     const origAuthor = parseAuthorLine(commit.authorLine);
     const origCommitter = parseAuthorLine(commit.committerLine);
     const newIdentity = pickIdentity(i);
     const tzOffset = getTzOffset(newTimestamps[i], schedule.timezone);
     const newTs = formatTimestamp(newTimestamps[i], tzOffset);
 
-    // Replace author/committer
-    commit.authorLine = formatAuthorLine("author", newIdentity, newTs);
-    commit.committerLine = formatAuthorLine("committer", newIdentity, newTs);
+    // Transform message
+    let message = stripAiCoAuthors(commit.message);
+    message = capitalizeConventionalCommit(message);
 
-    // Strip AI co-authors from message
-    commit.message = stripAiCoAuthors(commit.message);
-    commit.message = capitalizeConventionalCommit(commit.message);
+    const newAuthorLine = formatAuthorLine("author", newIdentity, newTs);
+    const newCommitterLine = formatAuthorLine("committer", newIdentity, newTs);
+
+    modifications.push({
+      authorLine: newAuthorLine,
+      committerLine: newCommitterLine,
+      message,
+    });
 
     changeLog.push({
       index: i,
@@ -281,7 +372,7 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
       originalCommitter: origCommitter.identity,
       authorDate: origAuthor.timestamp,
       commitDate: origCommitter.timestamp,
-      message: commit.message.split("\n")[0], // first line only for display
+      message: message.split("\n")[0],
       newAuthor: newIdentity,
       newCommitter: newIdentity,
       newAuthorDate: newTs,
@@ -293,11 +384,8 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
     return changeLog;
   }
 
-  // Serialize back
-  const output = entries.map((e) => {
-    if (e.type === "commit") return serializeCommit(e.commit);
-    return e.lines.join("\n");
-  }).join("\n");
+  // Rebuild the stream with modifications
+  let modifiedStream = rebuild(modifications);
 
   // Determine target ref
   const targetRef = config.inPlace ? branch : `herodotus/${branch}`;
@@ -308,13 +396,17 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
     createBackupRef(repoPath, branch, config.backup as string);
   }
 
-  // Write the modified stream, replacing the branch ref
-  const modifiedOutput = output.replace(
-    new RegExp(`^commit refs/heads/${escapeRegex(branch)}`, "gm"),
-    `commit refs/heads/${targetRef}`,
-  );
+  // Replace branch ref if needed
+  if (targetRef !== branch) {
+    const streamText = decoder.decode(modifiedStream);
+    const replaced = streamText.replace(
+      new RegExp(`^commit refs/heads/${escapeRegex(branch)}`, "gm"),
+      `commit refs/heads/${targetRef}`,
+    );
+    modifiedStream = encoder.encode(replaced);
+  }
 
-  // Import
+  // Import using raw bytes
   const importProc = new Deno.Command("git", {
     args: ["fast-import", "--force", "--quiet"],
     cwd: repoPath,
@@ -323,13 +415,18 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
     stderr: "piped",
   }).spawn();
 
+  const CHUNK_SIZE = 64 * 1024;
   const writer = importProc.stdin.getWriter();
-  await writer.write(new TextEncoder().encode(modifiedOutput));
+  for (let offset = 0; offset < modifiedStream.length; offset += CHUNK_SIZE) {
+    await writer.write(
+      modifiedStream.subarray(offset, offset + CHUNK_SIZE),
+    );
+  }
   await writer.close();
 
   const importResult = await importProc.output();
   if (importResult.code !== 0) {
-    const stderr = new TextDecoder().decode(importResult.stderr);
+    const stderr = decoder.decode(importResult.stderr);
     throw new Error(`git fast-import failed: ${stderr}`);
   }
 
