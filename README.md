@@ -57,7 +57,8 @@ herodotus [options] [<repo-path>]
       --end <HH:MM>             Workday end (default: 18:00)
       --timezone <tz>           IANA timezone (default: system)
   -d, --allowed-days <days>     Comma-separated days (default: Mon-Sat)
-      --future-dates            Allow commits with future dates
+      --start-date <date>       First commit at this date (build forward)
+      --end-date <date>         Last commit at this date (build backward, default: now)
       --in-place                Rewrite branch in-place with backup
       --dry-run                 Show changes without modifying
       --seed <number>           PRNG seed for reproducible output

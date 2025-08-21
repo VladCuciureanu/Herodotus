@@ -7,7 +7,7 @@ const schedule: ScheduleConfig = {
   end: 18 * 60, // 18:00
   timezone: "UTC",
   allowedDays: [1, 2, 3, 4, 5],
-  futureDates: true,
+  anchor: { type: "start", date: new Date("2024-01-08T09:00:00Z") },
 };
 
 describe("redistributeTimestamps", () => {

@@ -16,6 +16,26 @@ const DAY_MAP: Record<string, number> = {
 
 const DEFAULT_ALLOWED_DAYS = [1, 2, 3, 4, 5, 6]; // Mon-Sat
 
+export function parseAnchor(
+  startDate?: string,
+  endDate?: string,
+): ScheduleConfig["anchor"] {
+  if (startDate && endDate) {
+    throw new Error("Cannot specify both --start-date and --end-date. Choose one.");
+  }
+  if (startDate) {
+    const d = new Date(startDate);
+    if (isNaN(d.getTime())) throw new Error(`Invalid start date: "${startDate}"`);
+    return { type: "start", date: d };
+  }
+  if (endDate) {
+    const d = new Date(endDate);
+    if (isNaN(d.getTime())) throw new Error(`Invalid end date: "${endDate}"`);
+    return { type: "end", date: d };
+  }
+  return { type: "end", date: new Date() };
+}
+
 export function parseDays(input: string[]): number[] {
   return input.map((d) => {
     const n = DAY_MAP[d.toLowerCase()];
@@ -31,7 +51,8 @@ interface TomlConfig {
     end?: string;
     timezone?: string;
     allowedDays?: string[];
-    futureDates?: boolean;
+    startDate?: string;
+    endDate?: string;
   };
 }
 
@@ -73,7 +94,7 @@ export async function loadConfigAsync(
       end: toml.schedule.end ? parseTime(toml.schedule.end) : 18 * 60,
       timezone: toml.schedule.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       allowedDays: toml.schedule.allowedDays ? parseDays(toml.schedule.allowedDays) : DEFAULT_ALLOWED_DAYS,
-      futureDates: toml.schedule.futureDates ?? false,
+      anchor: parseAnchor(toml.schedule.startDate, toml.schedule.endDate),
     };
   }
 
@@ -86,7 +107,7 @@ export function buildDefaultSchedule(): ScheduleConfig {
     end: 18 * 60,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     allowedDays: DEFAULT_ALLOWED_DAYS,
-    futureDates: false,
+    anchor: { type: "end", date: new Date() },
   };
 }
 

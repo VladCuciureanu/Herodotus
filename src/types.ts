@@ -8,7 +8,7 @@ export interface ScheduleConfig {
   end: number;
   timezone: string;
   allowedDays: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
-  futureDates: boolean;
+  anchor: { type: "start"; date: Date } | { type: "end"; date: Date };
 }
 
 export interface HerodotusConfig {

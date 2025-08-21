@@ -1,7 +1,7 @@
 import { parseArgs } from "util";
 import { resolve } from "path";
 import type { HerodotusConfig, Identity } from "./types";
-import { loadConfigAsync, buildConfig, parseDays } from "./config";
+import { loadConfigAsync, buildConfig, parseDays, parseAnchor } from "./config";
 
 function parseIdentity(s: string): Identity {
   const colonIdx = s.lastIndexOf(":");
@@ -33,7 +33,8 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
       end: { type: "string" },
       timezone: { type: "string" },
       "allowed-days": { type: "string", short: "d" },
-      "future-dates": { type: "boolean" },
+      "start-date": { type: "string" },
+      "end-date": { type: "string" },
       "in-place": { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
       seed: { type: "string" },
@@ -63,7 +64,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
   if (values["dry-run"]) cliArgs.dryRun = true;
   if (values.seed) cliArgs.seed = parseInt(values.seed);
 
-  if (values.start || values.end || values.timezone || values["allowed-days"] || values["future-dates"] !== undefined) {
+  if (values.start || values.end || values.timezone || values["allowed-days"] || values["start-date"] || values["end-date"]) {
     cliArgs.schedule = {
       start: values.start ? parseTime(values.start) : 9 * 60,
       end: values.end ? parseTime(values.end) : 18 * 60,
@@ -72,7 +73,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
       allowedDays: values["allowed-days"]
         ? parseDays(values["allowed-days"].split(","))
         : [1, 2, 3, 4, 5, 6],
-      futureDates: values["future-dates"] ?? false,
+      anchor: parseAnchor(values["start-date"], values["end-date"]),
     };
   }
 
@@ -92,7 +93,8 @@ Options:
   --end <HH:MM>                Workday end (default: 18:00)
   --timezone <tz>               IANA timezone (default: system)
   -d, --allowed-days <days>      Comma-separated days (default: Mon,Tue,Wed,Thu,Fri,Sat)
-  --future-dates                Allow commits with future dates
+  --start-date <date>           First commit lands on this date (build forward)
+  --end-date <date>             Last commit lands on this date (build backward, default: now)
   --in-place                    Rewrite branch in-place (default: new branch)
   --dry-run                     Show changes without modifying
   --seed <number>               PRNG seed for reproducibility
