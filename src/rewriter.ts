@@ -211,8 +211,13 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
     return parseTimestamp(parsed.timestamp);
   });
 
+  // Count file changes per commit (M, D, R, C lines in bodyLines)
+  const changeCounts = commits.map((e) =>
+    e.commit.bodyLines.filter((l) => /^[MDRC] /.test(l)).length,
+  );
+
   // Redistribute timestamps
-  const newTimestamps = redistributeTimestamps(originalTimestamps, schedule, seed);
+  const newTimestamps = redistributeTimestamps(originalTimestamps, schedule, seed, changeCounts);
 
   // Create identity picker
   const pickIdentity = createIdentityPicker(config.identities, seed);

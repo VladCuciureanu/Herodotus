@@ -3,6 +3,7 @@ import { seededRandom, gaussianRandom } from "./random";
 
 const MIN_GAP_MS = 2 * 60 * 1000; // 2 minutes
 const MAX_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours
+const BASE_MS_PER_CHANGE = 3 * 60 * 1000; // 3 minutes per file change
 
 /**
  * Given a Date, return the local time-of-day in minutes within the given timezone.
@@ -142,6 +143,7 @@ export function redistributeTimestamps(
   timestamps: number[],
   schedule: ScheduleConfig,
   seed: number,
+  changeCounts?: number[],
 ): number[] {
   if (timestamps.length === 0) return [];
   if (timestamps.length === 1) {
@@ -150,22 +152,16 @@ export function redistributeTimestamps(
   }
 
   const rng = seededRandom(seed);
-  const workDayMinutes = schedule.end - schedule.start;
-  const workDayMs = workDayMinutes * 60 * 1000;
 
-  // Compute original gaps
-  const gaps: number[] = [];
+  // Compute gaps based on change counts of the next commit
+  const clampedGaps: number[] = [];
   for (let i = 1; i < timestamps.length; i++) {
-    gaps.push(Math.max(0, (timestamps[i] - timestamps[i - 1]) * 1000));
+    const changes = changeCounts ? Math.max(1, changeCounts[i]) : 1;
+    const baseGap = changes * BASE_MS_PER_CHANGE;
+    const clamped = Math.max(MIN_GAP_MS, Math.min(MAX_GAP_MS, baseGap));
+    const jitter = gaussianRandom(rng, 0, clamped * 0.15);
+    clampedGaps.push(Math.max(MIN_GAP_MS, clamped + jitter));
   }
-
-  // Clamp gaps
-  const clampedGaps = gaps.map((g) => {
-    const clamped = Math.max(MIN_GAP_MS, Math.min(MAX_GAP_MS, g));
-    // Add some jitter
-    const jitter = gaussianRandom(rng, 0, clamped * 0.08);
-    return Math.max(MIN_GAP_MS, clamped + jitter);
-  });
 
   // Build new timeline
   const result: number[] = [];
