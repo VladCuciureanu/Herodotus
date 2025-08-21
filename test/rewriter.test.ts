@@ -49,7 +49,7 @@ describe("rewriter", () => {
   test("dry run reports changes without modifying repo", () => {
     const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
-      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", weekends: false },
+      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", workdays: true, weekends: false },
       inPlace: false,
       dryRun: true,
       branch: "main",
@@ -71,7 +71,7 @@ describe("rewriter", () => {
   test("rewrites to new branch with correct identity", async () => {
     const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
-      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", weekends: false },
+      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", workdays: true, weekends: false },
       inPlace: false,
       dryRun: false,
       branch: "main",
@@ -97,7 +97,7 @@ describe("rewriter", () => {
   test("strips AI co-authors but keeps human ones", async () => {
     const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
-      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", weekends: false },
+      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", workdays: true, weekends: false },
       inPlace: false,
       dryRun: false,
       branch: "main",
@@ -122,7 +122,7 @@ describe("rewriter", () => {
   test("timestamps are within work hours", async () => {
     const config: HerodotusConfig = {
       identities: [{ name: "New Author", email: "new@example.com" }],
-      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", weekends: false },
+      schedule: { start: 9 * 60, end: 18 * 60, timezone: "UTC", workdays: true, weekends: false },
       inPlace: false,
       dryRun: false,
       branch: "main",

@@ -41,7 +41,9 @@ function getDayOfWeekInTz(date: Date, tz: string): number {
  */
 function isInWorkWindow(date: Date, schedule: ScheduleConfig): boolean {
   const dow = getDayOfWeekInTz(date, schedule.timezone);
-  if (!schedule.weekends && (dow === 0 || dow === 6)) return false;
+  const isWeekend = dow === 0 || dow === 6;
+  if (!schedule.weekends && isWeekend) return false;
+  if (!schedule.workdays && !isWeekend) return false;
 
   const mins = getMinutesInTz(date, schedule.timezone);
   return mins >= schedule.start && mins < schedule.end;
