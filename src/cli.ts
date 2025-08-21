@@ -32,8 +32,9 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
       start: { type: "string" },
       end: { type: "string" },
       timezone: { type: "string" },
-      workdays: { type: "boolean", default: true },
-      weekends: { type: "boolean", default: false },
+      workdays: { type: "boolean" },
+      "no-workdays": { type: "boolean" },
+      weekends: { type: "boolean" },
       "in-place": { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
       seed: { type: "string" },
@@ -63,13 +64,16 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
   if (values["dry-run"]) cliArgs.dryRun = true;
   if (values.seed) cliArgs.seed = parseInt(values.seed);
 
-  if (values.start || values.end || values.timezone || values.workdays !== undefined || values.weekends) {
+  const workdaysExplicit = values.workdays !== undefined || values["no-workdays"] !== undefined;
+  const resolvedWorkdays = values["no-workdays"] ? false : values.workdays ?? undefined;
+
+  if (values.start || values.end || values.timezone || workdaysExplicit || values.weekends) {
     cliArgs.schedule = {
       start: values.start ? parseTime(values.start) : 9 * 60,
       end: values.end ? parseTime(values.end) : 18 * 60,
       timezone:
         values.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-      workdays: values.workdays ?? true,
+      workdays: resolvedWorkdays ?? true,
       weekends: values.weekends ?? false,
     };
   }
