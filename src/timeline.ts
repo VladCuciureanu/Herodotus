@@ -56,11 +56,30 @@ function isInWorkWindow(date: Date, schedule: ScheduleConfig): boolean {
 function advanceToWorkSlot(date: Date, schedule: ScheduleConfig): Date {
   let d = new Date(date.getTime());
 
-  // Max 14 days of advancing to prevent infinite loops
-  for (let i = 0; i < 14 * 24 * 60; i++) {
-    if (isInWorkWindow(d, schedule)) return d;
-    // Advance by 1 minute
-    d = new Date(d.getTime() + 60 * 1000);
+  // Try up to 14 days to find a valid slot
+  for (let day = 0; day < 14; day++) {
+    const dow = getDayOfWeekInTz(d, schedule.timezone);
+    const isWeekend = dow === 0 || dow === 6;
+    const dayAllowed =
+      (isWeekend && schedule.weekends) || (!isWeekend && schedule.workdays);
+
+    if (dayAllowed) {
+      const mins = getMinutesInTz(d, schedule.timezone);
+      if (mins < schedule.end) {
+        // Snap to start if before work hours
+        if (mins < schedule.start) {
+          d = new Date(d.getTime() + (schedule.start - mins) * 60 * 1000);
+        }
+        return d;
+      }
+    }
+
+    // Jump to next day at work start time
+    const mins = getMinutesInTz(d, schedule.timezone);
+    const minsUntilMidnight = 24 * 60 - mins;
+    d = new Date(
+      d.getTime() + (minsUntilMidnight + schedule.start) * 60 * 1000,
+    );
   }
 
   // Fallback: return as-is (shouldn't happen with valid config)
