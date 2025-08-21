@@ -1,0 +1,9 @@
+[[identity]]
+name = "Vlad Cuciureanu"
+email = "vlad@cuciureanu.net"
+
+[schedule]
+start = "09:00"
+end = "18:00"
+timezone = "Europe/Bucharest"
+weekends = false
