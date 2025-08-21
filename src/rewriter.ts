@@ -1,5 +1,6 @@
 import type { HerodotusConfig, Identity, CommitInfo } from "./types";
 import { stripAiCoAuthors } from "./ai-authors";
+import { capitalizeConventionalCommit } from "./commit-message";
 import { createIdentityPicker } from "./identity";
 import { redistributeTimestamps } from "./timeline";
 
@@ -234,6 +235,7 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
 
     // Strip AI co-authors from message
     commit.message = stripAiCoAuthors(commit.message);
+    commit.message = capitalizeConventionalCommit(commit.message);
 
     changeLog.push({
       index: i,
