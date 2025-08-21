@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import type { HerodotusConfig, Identity } from "./types.ts";
-import { loadConfigAsync, buildConfig, parseDays, parseAnchor } from "./config.ts";
+import { loadConfigAsync, buildConfig, parseDays, parseAnchor, parseTime, DEFAULT_ALLOWED_DAYS } from "./config.ts";
 
 function parseIdentity(s: string): Identity {
   const colonIdx = s.lastIndexOf(":");
@@ -14,12 +14,6 @@ function parseIdentity(s: string): Identity {
     name: s.slice(0, colonIdx).trim(),
     email: s.slice(colonIdx + 1).trim(),
   };
-}
-
-function parseTime(s: string): number {
-  const match = s.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) throw new Error(`Invalid time format: "${s}". Expected "HH:MM"`);
-  return parseInt(match[1]) * 60 + parseInt(match[2]);
 }
 
 export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
@@ -62,7 +56,11 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
   if (values.branch) cliArgs.branch = values.branch;
   if (values["in-place"]) cliArgs.inPlace = true;
   if (values["dry-run"]) cliArgs.dryRun = true;
-  if (values.seed) cliArgs.seed = parseInt(values.seed);
+  if (values.seed) {
+    const seed = parseInt(values.seed, 10);
+    if (!Number.isFinite(seed) || seed < 0) throw new Error(`Invalid seed: "${values.seed}". Must be a non-negative integer`);
+    cliArgs.seed = seed;
+  }
 
   if (values.start || values.end || values.timezone || values["allowed-days"] || values["start-date"] || values["end-date"]) {
     cliArgs.schedule = {
@@ -72,7 +70,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
         values.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       allowedDays: values["allowed-days"]
         ? parseDays(values["allowed-days"].split(","))
-        : [1, 2, 3, 4, 5, 6],
+        : DEFAULT_ALLOWED_DAYS,
       anchor: parseAnchor(values["start-date"], values["end-date"]),
     };
   }

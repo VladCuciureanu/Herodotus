@@ -14,6 +14,9 @@ A git history rewriter that makes your commit log look like it was written by a 
 ## Quick start
 
 ```bash
+# Generate a config file
+deno task start init
+
 # Run on the current repo (writes to herodotus/<branch>)
 deno task start
 
@@ -79,7 +82,3 @@ Herodotus pipes your branch through `git fast-export`, transforms the stream in 
 deno task build    # compiles to ./herodotus binary
 deno task test     # run the test suite
 ```
-
-## License
-
-MIT

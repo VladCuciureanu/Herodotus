@@ -19,8 +19,6 @@ const AI_PATTERNS: RegExp[] = [
   /noreply@github\.com/i,
 ];
 
-const CO_AUTHOR_RE = /^co-authored-by:\s*(.+)$/im;
-
 function isAiCoAuthor(value: string): boolean {
   return AI_PATTERNS.some((p) => p.test(value));
 }

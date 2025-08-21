@@ -1,11 +1,15 @@
 import { parse as parseToml } from "smol-toml";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { HerodotusConfig, Identity, ScheduleConfig } from "./types.ts";
+import type { HerodotusConfig, ScheduleConfig } from "./types.ts";
 import { getDefaultIdentity, getCurrentBranch } from "./utils.ts";
 
-function parseTime(s: string): number {
-  const [h, m] = s.split(":").map(Number);
+export function parseTime(s: string): number {
+  const match = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) throw new Error(`Invalid time format: "${s}". Expected "HH:MM"`);
+  const h = parseInt(match[1]);
+  const m = parseInt(match[2]);
+  if (h > 23 || m > 59) throw new Error(`Invalid time: "${s}". Hours must be 0-23, minutes 0-59`);
   return h * 60 + m;
 }
 
@@ -14,7 +18,7 @@ const DAY_MAP: Record<string, number> = {
   sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
 };
 
-const DEFAULT_ALLOWED_DAYS = [1, 2, 3, 4, 5, 6]; // Mon-Sat
+export const DEFAULT_ALLOWED_DAYS = [1, 2, 3, 4, 5, 6]; // Mon-Sat
 
 export function parseAnchor(
   startDate?: string,
