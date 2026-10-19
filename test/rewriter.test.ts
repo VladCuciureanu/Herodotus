@@ -165,4 +165,37 @@ describe("rewriter", () => {
       assert.ok(hours < 18);
     }
   });
+
+  it("preserves non-UTF-8 binary blobs in new-branch mode", async () => {
+    const binary = Buffer.from([0xff, 0xfe, 0x00, 0x80, 0xc3, 0x28, 0x0a]);
+    writeFileSync(join(repoDir, "blob.bin"), binary);
+    git(["add", "blob.bin"], repoDir);
+    git([
+      "commit",
+      "-m",
+      "Add binary",
+      "--date",
+      "2024-01-09T03:00:00+0000",
+    ], repoDir);
+    const originalHead = git(["rev-parse", "main"], repoDir);
+
+    const config: HerodotusConfig = {
+      identities: [{ name: "New Author", email: "new@example.com" }],
+      schedule,
+      inPlace: false,
+      dryRun: false,
+      branch: "main",
+      repoPath: repoDir,
+      backup: false,
+      seed: 42,
+    };
+
+    await rewrite(config);
+
+    assert.equal(
+      git(["rev-parse", "herodotus/main:blob.bin"], repoDir),
+      git(["rev-parse", "main:blob.bin"], repoDir),
+    );
+    assert.equal(git(["rev-parse", "main"], repoDir), originalHead);
+  });
 });

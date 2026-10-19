@@ -111,7 +111,10 @@ function parseFastExportBinary(
   buf: Uint8Array,
 ): {
   commits: CommitMeta[];
-  rebuild: (modifications: CommitModification[]) => Uint8Array;
+  rebuild: (
+    modifications: CommitModification[],
+    refRename?: RefRename,
+  ) => Uint8Array;
 } {
   const commits: CommitMeta[] = [];
   // Track commit regions for later replacement
@@ -127,6 +130,8 @@ function parseFastExportBinary(
     message: string;
     changeCount: number;
   }[] = [];
+  // Track "reset <ref>" lines outside commits so the ref can be renamed
+  const resetRegions: { start: number; end: number; line: string }[] = [];
 
   let offset = 0;
   while (offset < buf.length) {
@@ -228,22 +233,55 @@ function parseFastExportBinary(
       }
     } else {
       // Other lines (reset, tag, etc.) - skip line by line
-      const { next } = readLine(buf, offset);
+      const { line, next } = readLine(buf, offset);
+      if (line.startsWith("reset ")) {
+        resetRegions.push({ start: offset, end: next, line });
+      }
       offset = next;
     }
   }
 
-  const rebuild = (modifications: CommitModification[]): Uint8Array => {
-    // Build modified output by replacing commit headers in-place
+  const rebuild = (
+    modifications: CommitModification[],
+    refRename?: RefRename,
+  ): Uint8Array => {
+    // Build modified output by replacing commit headers in-place.
+    // Only command/header lines are decoded and re-encoded; everything else
+    // (notably blob data) is copied byte-for-byte.
     const chunks: Uint8Array[] = [];
     let lastEnd = 0;
+    let resetIdx = 0;
+
+    const renameCommand = (line: string, command: string): string => {
+      if (!refRename) return line;
+      return line === `${command} ${refRename.from}`
+        ? `${command} ${refRename.to}`
+        : line;
+    };
+
+    // Copy buf[lastEnd, until) unchanged, except for renamed reset lines.
+    const copyUntil = (until: number): void => {
+      while (
+        resetIdx < resetRegions.length &&
+        resetRegions[resetIdx].start < until
+      ) {
+        const reset = resetRegions[resetIdx++];
+        const renamed = renameCommand(reset.line, "reset");
+        if (renamed === reset.line) continue;
+        chunks.push(buf.subarray(lastEnd, reset.start));
+        chunks.push(encoder.encode(renamed + "\n"));
+        lastEnd = reset.end;
+      }
+      chunks.push(buf.subarray(lastEnd, until));
+      lastEnd = until;
+    };
 
     for (let i = 0; i < commitRegions.length; i++) {
       const region = commitRegions[i];
       const mod = modifications[i];
 
       // Copy everything before this commit's header unchanged
-      chunks.push(buf.subarray(lastEnd, region.headerStart));
+      copyUntil(region.headerStart);
 
       // Build new header
       const headerLines: string[] = [];
@@ -254,6 +292,8 @@ function parseFastExportBinary(
           headerLines.push(mod.authorLine);
         } else if (line.startsWith("committer ")) {
           headerLines.push(mod.committerLine);
+        } else if (line.startsWith("commit ")) {
+          headerLines.push(renameCommand(line, "commit"));
         } else {
           headerLines.push(line);
         }
@@ -276,9 +316,7 @@ function parseFastExportBinary(
     }
 
     // Copy remaining data after last commit
-    if (lastEnd < buf.length) {
-      chunks.push(buf.subarray(lastEnd, buf.length));
-    }
+    copyUntil(buf.length);
 
     // Concatenate all chunks
     let totalLen = 0;
@@ -293,6 +331,11 @@ function parseFastExportBinary(
   };
 
   return { commits, rebuild };
+}
+
+interface RefRename {
+  from: string; // full ref name, e.g. "refs/heads/main"
+  to: string;
 }
 
 interface CommitModification {
@@ -384,26 +427,23 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
     return changeLog;
   }
 
-  // Rebuild the stream with modifications
-  let modifiedStream = rebuild(modifications);
-
   // Determine target ref
   const targetRef = config.inPlace ? branch : `herodotus/${branch}`;
+
+  // Rebuild the stream with modifications, pointing it at the target ref.
+  // The rename is applied to parsed command lines only, so blob bytes are
+  // never decoded/re-encoded (which would corrupt non-UTF-8 content).
+  const modifiedStream = rebuild(
+    modifications,
+    targetRef !== branch
+      ? { from: `refs/heads/${branch}`, to: `refs/heads/${targetRef}` }
+      : undefined,
+  );
 
   // Create backup if in-place
   if (config.inPlace && config.backup) {
     const { createBackupRef } = await import("./utils.ts");
     createBackupRef(repoPath, branch, config.backup as string);
-  }
-
-  // Replace branch ref if needed
-  if (targetRef !== branch) {
-    const streamText = decoder.decode(modifiedStream);
-    const replaced = streamText.replace(
-      new RegExp(`^commit refs/heads/${escapeRegex(branch)}`, "gm"),
-      `commit refs/heads/${targetRef}`,
-    );
-    modifiedStream = encoder.encode(replaced);
   }
 
   // Import using raw bytes
@@ -428,8 +468,4 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   }
 
   return changeLog;
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
