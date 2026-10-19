@@ -1,54 +1,36 @@
-import { describe, it } from "jsr:@std/testing/bdd";
-import { expect } from "jsr:@std/expect";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { capitalizeConventionalCommit } from "../src/commit-message.ts";
 
 describe("capitalizeConventionalCommit", () => {
   it("capitalizes after feat:", () => {
-    expect(capitalizeConventionalCommit("feat: add login")).toBe(
-      "feat: Add login",
-    );
+    assert.equal(capitalizeConventionalCommit("feat: add login"), "feat: Add login");
   });
 
   it("capitalizes after fix:", () => {
-    expect(capitalizeConventionalCommit("fix: resolve crash")).toBe(
-      "fix: Resolve crash",
-    );
+    assert.equal(capitalizeConventionalCommit("fix: resolve crash"), "fix: Resolve crash");
   });
 
   it("capitalizes with scope", () => {
-    expect(capitalizeConventionalCommit("feat(auth): add login")).toBe(
-      "feat(auth): Add login",
-    );
+    assert.equal(capitalizeConventionalCommit("feat(auth): add login"), "feat(auth): Add login");
   });
 
   it("leaves already capitalized alone", () => {
-    expect(capitalizeConventionalCommit("feat: Add login")).toBe(
-      "feat: Add login",
-    );
+    assert.equal(capitalizeConventionalCommit("feat: Add login"), "feat: Add login");
   });
 
   it("leaves non-conventional commits alone", () => {
-    expect(capitalizeConventionalCommit("Initial commit")).toBe(
-      "Initial commit",
-    );
+    assert.equal(capitalizeConventionalCommit("Initial commit"), "Initial commit");
   });
 
   it("handles chore, docs, refactor, etc.", () => {
-    expect(capitalizeConventionalCommit("chore: update deps")).toBe(
-      "chore: Update deps",
-    );
-    expect(capitalizeConventionalCommit("docs: add readme")).toBe(
-      "docs: Add readme",
-    );
-    expect(capitalizeConventionalCommit("refactor: extract helper")).toBe(
-      "refactor: Extract helper",
-    );
+    assert.equal(capitalizeConventionalCommit("chore: update deps"), "chore: Update deps");
+    assert.equal(capitalizeConventionalCommit("docs: add readme"), "docs: Add readme");
+    assert.equal(capitalizeConventionalCommit("refactor: extract helper"), "refactor: Extract helper");
   });
 
   it("only affects first line", () => {
     const msg = "feat: add login\n\nsome body text";
-    expect(capitalizeConventionalCommit(msg)).toBe(
-      "feat: Add login\n\nsome body text",
-    );
+    assert.equal(capitalizeConventionalCommit(msg), "feat: Add login\n\nsome body text");
   });
 });

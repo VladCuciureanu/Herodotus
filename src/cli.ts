@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
+import process from "node:process";
 import type { HerodotusConfig, Identity } from "./types.ts";
 import {
   buildConfig,
@@ -47,7 +48,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
 
   if (values.help) {
     printUsage();
-    Deno.exit(0);
+    process.exit(0);
   }
 
   const repoPath = resolve(positionals[0] ?? ".");

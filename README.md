@@ -18,21 +18,27 @@ well-adjusted developer with healthy work habits.
 
 ## Quick start
 
+Requires Node.js 24+ and git.
+
+```bash
+npm install
+```
+
 ```bash
 # Generate a config file
-deno task start init
+npm start -- init
 
 # Run on the current repo (writes to herodotus/<branch>)
-deno task start
+npm start
 
 # Specify an identity
-deno task start -i "Ada Lovelace:ada@example.com"
+npm start -- -i "Ada Lovelace:ada@example.com"
 
 # Preview changes without modifying anything
-deno task start --dry-run
+npm start -- --dry-run
 
 # Rewrite in-place (creates a backup ref)
-deno task start --in-place
+npm start -- --in-place
 ```
 
 ## Configuration
@@ -88,9 +94,10 @@ jitter so the result doesn't look mechanical.
 leaving your original history untouched. Use `--in-place` to rewrite directly (a
 backup ref is created automatically).
 
-## Build
+## Install & test
 
 ```bash
-deno task build    # compiles to ./herodotus binary
-deno task test     # run the test suite
+npm link           # installs the `herodotus` command globally
+npm test           # run the test suite
+npm run typecheck  # type-check with tsc
 ```

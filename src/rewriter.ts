@@ -1,3 +1,4 @@
+import { spawn, spawnSync } from "node:child_process";
 import type { CommitInfo, HerodotusConfig, Identity } from "./types.ts";
 import { stripAiCoAuthors } from "./ai-authors.ts";
 import { capitalizeConventionalCommit } from "./commit-message.ts";
@@ -307,20 +308,19 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   const { repoPath, branch, schedule, seed } = config;
 
   // Export (keep as raw bytes)
-  const fullExportProc = new Deno.Command("git", {
-    args: ["fast-export", branch],
+  const fullExportProc = spawnSync("git", ["fast-export", branch], {
     cwd: repoPath,
-    stdout: "piped",
-    stderr: "piped",
-  }).outputSync();
+    maxBuffer: Infinity,
+  });
 
-  if (fullExportProc.code !== 0) {
+  if (fullExportProc.error) throw fullExportProc.error;
+  if (fullExportProc.status !== 0) {
     throw new Error(
       `git fast-export failed: ${decoder.decode(fullExportProc.stderr)}`,
     );
   }
 
-  const rawExport = fullExportProc.stdout;
+  const rawExport: Uint8Array = fullExportProc.stdout;
   const { commits, rebuild } = parseFastExportBinary(rawExport);
 
   const originalTimestamps = commits.map((c) => {
@@ -407,26 +407,23 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   }
 
   // Import using raw bytes
-  const importProc = new Deno.Command("git", {
-    args: ["fast-import", "--force", "--quiet"],
+  const importProc = spawn("git", ["fast-import", "--force", "--quiet"], {
     cwd: repoPath,
-    stdin: "piped",
-    stdout: "piped",
-    stderr: "piped",
-  }).spawn();
+    stdio: ["pipe", "ignore", "pipe"],
+  });
 
-  const CHUNK_SIZE = 64 * 1024;
-  const writer = importProc.stdin.getWriter();
-  for (let offset = 0; offset < modifiedStream.length; offset += CHUNK_SIZE) {
-    await writer.write(
-      modifiedStream.subarray(offset, offset + CHUNK_SIZE),
-    );
-  }
-  await writer.close();
+  const stderrChunks: Buffer[] = [];
+  importProc.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+  // A write error (e.g. EPIPE if git exits early) surfaces via the exit code.
+  importProc.stdin.on("error", () => {});
+  importProc.stdin.end(modifiedStream);
 
-  const importResult = await importProc.output();
-  if (importResult.code !== 0) {
-    const stderr = decoder.decode(importResult.stderr);
+  const exitCode = await new Promise<number | null>((resolve, reject) => {
+    importProc.on("error", reject);
+    importProc.on("close", resolve);
+  });
+  if (exitCode !== 0) {
+    const stderr = Buffer.concat(stderrChunks).toString("utf8");
     throw new Error(`git fast-import failed: ${stderr}`);
   }
 

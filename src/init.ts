@@ -1,15 +1,16 @@
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import process from "node:process";
 
 function getGitConfig(key: string, cwd: string): string | null {
-  const result = new Deno.Command("git", {
-    args: ["config", key],
+  const result = spawnSync("git", ["config", key], {
     cwd,
-    stdout: "piped",
-    stderr: "piped",
-  }).outputSync();
-  if (result.code !== 0) return null;
-  return new TextDecoder().decode(result.stdout).trim();
+    encoding: "utf8",
+  });
+  if (result.status !== 0) return null;
+  return result.stdout.trim();
 }
 
 export async function runInit(repoPath: string): Promise<void> {
@@ -17,7 +18,7 @@ export async function runInit(repoPath: string): Promise<void> {
 
   if (existsSync(configPath)) {
     console.error("Error: .herodotus.toml already exists.");
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const name = getGitConfig("user.name", repoPath) ?? "Your Name";
@@ -37,6 +38,6 @@ email = "${email}"
 # endDate = "2026-12-31T18:00:00"
 `;
 
-  await Deno.writeTextFile(configPath, content);
+  await writeFile(configPath, content);
   console.log(`Created .herodotus.toml`);
 }

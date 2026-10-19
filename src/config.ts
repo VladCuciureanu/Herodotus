@@ -1,5 +1,6 @@
 import { parse as parseToml } from "smol-toml";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { HerodotusConfig, ScheduleConfig } from "./types.ts";
 import { getCurrentBranch, getDefaultIdentity } from "./utils.ts";
@@ -87,7 +88,7 @@ export async function loadConfigAsync(
   const filePath = resolve(repoPath, configPath ?? ".herodotus.toml");
   if (!existsSync(filePath)) return {};
 
-  const content = await Deno.readTextFile(filePath);
+  const content = await readFile(filePath, "utf8");
   const toml = parseToml(content) as unknown as TomlConfig;
 
   const result: Partial<HerodotusConfig> = {};

@@ -1,17 +1,18 @@
+import { spawnSync } from "node:child_process";
 import type { Identity } from "./types.ts";
 
 function run(cmd: string[], cwd: string): string {
-  const result = new Deno.Command(cmd[0], {
-    args: cmd.slice(1),
+  const result = spawnSync(cmd[0], cmd.slice(1), {
     cwd,
-    stderr: "piped",
-    stdout: "piped",
-  }).outputSync();
-  if (result.code !== 0) {
-    const stderr = new TextDecoder().decode(result.stderr).trim();
+    encoding: "utf8",
+    maxBuffer: Infinity,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    const stderr = result.stderr.trim();
     throw new Error(`Command failed: ${cmd.join(" ")}\n${stderr}`);
   }
-  return new TextDecoder().decode(result.stdout).trim();
+  return result.stdout.trim();
 }
 
 export function getDefaultIdentity(repoPath: string): Identity {

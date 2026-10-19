@@ -1,12 +1,13 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run
+#!/usr/bin/env node
 import { parseCli } from "./cli.ts";
 import { runInit } from "./init.ts";
 import { rewrite } from "./rewriter.ts";
 import { branchExists, isWorkingTreeClean } from "./utils.ts";
 import { resolve } from "node:path";
+import process from "node:process";
 
 async function main() {
-  const args = Deno.args;
+  const args = process.argv.slice(2);
 
   if (args[0] === "init") {
     const repoPath = resolve(args[1] ?? ".");
@@ -21,12 +22,12 @@ async function main() {
     console.error(
       "Error: working tree has uncommitted changes. Commit or stash them first.",
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 
   if (!branchExists(config.repoPath, config.branch)) {
     console.error(`Error: branch "${config.branch}" does not exist.`);
-    Deno.exit(1);
+    process.exit(1);
   }
 
   if (
@@ -36,7 +37,7 @@ async function main() {
     console.error(
       `Error: branch "herodotus/${config.branch}" already exists. Delete it first or use --in-place.`,
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 
   console.log(
@@ -89,5 +90,5 @@ async function main() {
 
 main().catch((err) => {
   console.error(`Error: ${err.message}`);
-  Deno.exit(1);
+  process.exit(1);
 });

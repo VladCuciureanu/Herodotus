@@ -1,5 +1,5 @@
-import { describe, it } from "jsr:@std/testing/bdd";
-import { expect } from "jsr:@std/expect";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { redistributeTimestamps } from "../src/timeline.ts";
 import type { ScheduleConfig } from "../src/types.ts";
 
@@ -13,7 +13,7 @@ const schedule: ScheduleConfig = {
 
 describe("redistributeTimestamps", () => {
   it("empty array returns empty", () => {
-    expect(redistributeTimestamps([], schedule, 42)).toEqual([]);
+    assert.deepEqual(redistributeTimestamps([], schedule, 42), []);
   });
 
   it("single timestamp is moved to work hours", () => {
@@ -22,8 +22,8 @@ describe("redistributeTimestamps", () => {
 
     const resultDate = new Date(result[0] * 1000);
     const hours = resultDate.getUTCHours();
-    expect(hours).toBeGreaterThanOrEqual(9);
-    expect(hours).toBeLessThan(18);
+    assert.ok(hours >= 9);
+    assert.ok(hours < 18);
   });
 
   it("preserves commit order", () => {
@@ -32,7 +32,7 @@ describe("redistributeTimestamps", () => {
     const result = redistributeTimestamps(timestamps, schedule, 42);
 
     for (let i = 1; i < result.length; i++) {
-      expect(result[i]).toBeGreaterThan(result[i - 1]);
+      assert.ok(result[i] > result[i - 1]);
     }
   });
 
@@ -45,10 +45,10 @@ describe("redistributeTimestamps", () => {
       const d = new Date(ts * 1000);
       const hours = d.getUTCHours();
       const day = d.getUTCDay();
-      expect(hours).toBeGreaterThanOrEqual(9);
-      expect(hours).toBeLessThan(18);
-      expect(day).not.toBe(0);
-      expect(day).not.toBe(6);
+      assert.ok(hours >= 9);
+      assert.ok(hours < 18);
+      assert.notEqual(day, 0);
+      assert.notEqual(day, 6);
     }
   });
 
@@ -57,7 +57,7 @@ describe("redistributeTimestamps", () => {
     const timestamps = [base, base + 600, base + 7200];
     const r1 = redistributeTimestamps(timestamps, schedule, 123);
     const r2 = redistributeTimestamps(timestamps, schedule, 123);
-    expect(r1).toEqual(r2);
+    assert.deepEqual(r1, r2);
   });
 
   it("different seeds produce different results", () => {
@@ -65,6 +65,6 @@ describe("redistributeTimestamps", () => {
     const timestamps = [base, base + 600, base + 7200];
     const r1 = redistributeTimestamps(timestamps, schedule, 123);
     const r2 = redistributeTimestamps(timestamps, schedule, 456);
-    expect(r1.some((v, i) => v !== r2[i])).toBe(true);
+    assert.equal(r1.some((v, i) => v !== r2[i]), true);
   });
 });

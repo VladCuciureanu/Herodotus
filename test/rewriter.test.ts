@@ -1,30 +1,22 @@
-import { afterEach, beforeEach, describe, it } from "jsr:@std/testing/bdd";
-import { expect } from "jsr:@std/expect";
-import { mkdtempSync, rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rewrite } from "../src/rewriter.ts";
 import type { HerodotusConfig } from "../src/types.ts";
 
 function git(args: string[], cwd: string): string {
-  const result = new Deno.Command("git", {
-    args,
-    cwd,
-    stdout: "piped",
-    stderr: "piped",
-  }).outputSync();
-  if (result.code !== 0) {
-    throw new Error(
-      `git ${args.join(" ")} failed: ${
-        new TextDecoder().decode(result.stderr)
-      }`,
-    );
+  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
   }
-  return new TextDecoder().decode(result.stdout).trim();
+  return result.stdout.trim();
 }
 
 function writeFile(path: string, content: string): void {
-  Deno.writeTextFileSync(path, content);
+  writeFileSync(path, content);
 }
 
 function createTestRepo(): string {
@@ -98,10 +90,10 @@ describe("rewriter", () => {
     };
 
     const changes = await rewrite(config);
-    expect(changes.length).toBe(3);
+    assert.equal(changes.length, 3);
     const log = git(["log", "--oneline"], repoDir);
-    expect(log).toContain("Fix bug");
-    expect(() => git(["rev-parse", "herodotus/main"], repoDir)).toThrow();
+    assert.ok(log.includes("Fix bug"));
+    assert.throws(() => git(["rev-parse", "herodotus/main"], repoDir));
   });
 
   it("rewrites to new branch with correct identity", async () => {
@@ -119,7 +111,7 @@ describe("rewriter", () => {
     await rewrite(config);
 
     const branches = git(["branch"], repoDir);
-    expect(branches).toContain("herodotus/main");
+    assert.ok(branches.includes("herodotus/main"));
 
     const author = git(
       ["log", "--format=%an <%ae>", "herodotus/main"],
@@ -127,7 +119,7 @@ describe("rewriter", () => {
     );
     const lines = author.split("\n");
     for (const line of lines) {
-      expect(line).toBe("New Author <new@example.com>");
+      assert.equal(line, "New Author <new@example.com>");
     }
   });
 
@@ -146,9 +138,9 @@ describe("rewriter", () => {
     await rewrite(config);
 
     const messages = git(["log", "--format=%B", "herodotus/main"], repoDir);
-    expect(messages).not.toContain("noreply@anthropic.com");
-    expect(messages).not.toContain("noreply@github.com");
-    expect(messages).toContain("Alice <alice@example.com>");
+    assert.ok(!messages.includes("noreply@anthropic.com"));
+    assert.ok(!messages.includes("noreply@github.com"));
+    assert.ok(messages.includes("Alice <alice@example.com>"));
   });
 
   it("timestamps are within work hours", async () => {
@@ -169,8 +161,8 @@ describe("rewriter", () => {
     for (const line of dates.split("\n").filter(Boolean)) {
       const d = new Date(line);
       const hours = d.getUTCHours();
-      expect(hours).toBeGreaterThanOrEqual(9);
-      expect(hours).toBeLessThan(18);
+      assert.ok(hours >= 9);
+      assert.ok(hours < 18);
     }
   });
 });
