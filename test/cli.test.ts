@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -107,6 +107,20 @@ describe("parseCli", () => {
 
   it("fails when the file given with -c does not exist", async () => {
     await assert.rejects(parse("-c", "missing.toml"), /Config file not found: .*missing\.toml/);
+  });
+
+  it("rejects a workday that does not start before it ends", async () => {
+    await assert.rejects(
+      parse("--start", "18:00", "--end", "09:00"),
+      /start \(18:00\).*end \(9:00\)/,
+    );
+    await assert.rejects(parse("--start", "10:00", "--end", "10:00"), /must be before/);
+    await assert.rejects(parse("--start", "18:00"), /must be before its end \(18:00\)/);
+  });
+
+  it("rejects an empty allowedDays list", async () => {
+    writeFileSync(join(repoDir, ".herodotus.toml"), "[schedule]\nallowedDays = []\n");
+    await assert.rejects(parse(), /allowedDays must name at least one day/);
   });
 
   it("accepts a non-negative integer seed", async () => {

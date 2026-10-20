@@ -16,6 +16,11 @@ export function parseTime(s: string): number {
   return h * 60 + m;
 }
 
+/** Minutes from midnight as "H:MM", the inverse of parseTime. */
+export function formatTime(minutes: number): string {
+  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
 const DAY_MAP: Record<string, number> = {
   sun: 0,
   mon: 1,
@@ -234,6 +239,14 @@ export function buildConfig(
     ...fileConfig.schedule,
     ...cliArgs.schedule,
   };
+  if (schedule.start >= schedule.end) {
+    throw new Error(
+      `Workday start (${formatTime(schedule.start)}) must be before its end (${formatTime(schedule.end)})`,
+    );
+  }
+  if (schedule.allowedDays.length === 0) {
+    throw new Error("allowedDays must name at least one day");
+  }
 
   const branch = cliArgs.branch ?? getCurrentBranch(repoPath);
 

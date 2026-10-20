@@ -82,7 +82,8 @@ prefilled with your git identity and refuses to overwrite an existing one.
 | `--seed <n>`                  | current time                    | Non-negative integer seed for reproducible output   |
 | `-h, --help`                  |                                 | Show help                                           |
 
-`--start-date` and `--end-date` are mutually exclusive. Dates are anything
+The workday start must be before its end, and at least one day must be
+allowed. `--start-date` and `--end-date` are mutually exclusive. Dates are anything
 JavaScript's `Date` parses, e.g. `2026-01-05T09:00:00Z`. A date-time without
 `Z` or an offset is read in the machine's local timezone, not `--timezone`.
 
