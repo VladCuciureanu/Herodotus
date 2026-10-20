@@ -150,4 +150,9 @@ describe("--help", () => {
     const columns = new Set(options.map((line) => line.search(/\S+(?: \S+)*$/)));
     assert.equal(columns.size, 1, options.join("\n"));
   });
+
+  it("describes init and says a -c file must exist", () => {
+    assert.match(USAGE, /^ {2}init \[-c <file>\] +Write a starter config/m);
+    assert.match(USAGE, /-c, --config <file> +Config file, relative to <repo-path>; must exist/);
+  });
 });

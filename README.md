@@ -65,6 +65,8 @@ herodotus init [-c <file>] [<repo-path>]
 `<repo-path>` defaults to the current directory. `init` writes a
 `.herodotus.toml` (or the file given with `-c`, relative to `<repo-path>`)
 prefilled with your git identity and refuses to overwrite an existing one.
+Otherwise, a file named with `-c` must exist, while the default
+`.herodotus.toml` is read only if present.
 
 | Option                        | Default                         | Description                                         |
 | ----------------------------- | ------------------------------- | --------------------------------------------------- |
