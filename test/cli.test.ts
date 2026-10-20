@@ -44,4 +44,11 @@ describe("CLI errors", () => {
   it("reports an unknown flag as a one-line usage error", () => {
     assertError(herodotus(["--bogus", repoDir]), /Unknown option '--bogus'.*See herodotus --help/);
   });
+
+  it("calls a missing -b a ref, since any ref is accepted", () => {
+    assertError(
+      herodotus(["-b", "origin/nope", repoDir]),
+      /^herodotus: ref "origin\/nope" does not exist/,
+    );
+  });
 });

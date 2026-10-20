@@ -27,7 +27,7 @@ async function main() {
   }
 
   if (!branchExists(config.repoPath, config.branch)) {
-    throw new Error(`branch "${config.branch}" does not exist.`);
+    throw new Error(`ref "${config.branch}" does not exist.`);
   }
 
   // Refuses non-refs, ambiguous names and annotated tags in both modes.
