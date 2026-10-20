@@ -1,16 +1,15 @@
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { stringify } from "smol-toml";
+import { run } from "./utils.ts";
 
 function getGitConfig(key: string, cwd: string): string | null {
-  const result = spawnSync("git", ["config", key], {
-    cwd,
-    encoding: "utf8",
-  });
-  if (result.status !== 0) return null;
-  return result.stdout.trim();
+  try {
+    return run(["git", "config", key], cwd);
+  } catch {
+    return null;
+  }
 }
 
 /** Write a starter config to `configPath` (relative to the repo), never overwriting. */

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import type { Identity } from "./types.ts";
 
-function run(cmd: string[], cwd: string): string {
+export function run(cmd: string[], cwd: string): string {
   const result = spawnSync(cmd[0], cmd.slice(1), {
     cwd,
     encoding: "utf8",
