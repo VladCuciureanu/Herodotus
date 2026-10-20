@@ -95,48 +95,45 @@ function startsWith(buf: Uint8Array, offset: number, prefix: string): boolean {
   return true;
 }
 
-interface CommitMeta {
+/** A commit in the fast-export stream and the byte ranges it occupies. */
+interface CommitRegion {
+  headerStart: number; // offset of "commit <ref>"
+  headerLines: string[]; // lines between "commit" and "data N" (inclusive of "commit")
+  bodyStart: number; // offset after the message content
+  bodyEnd: number; // end of the commit block
   authorLine: string;
   committerLine: string;
   message: string;
   changeCount: number;
 }
 
+/** A "reset <ref>" line outside commits, kept so the ref can be renamed. */
+interface ResetRegion {
+  start: number;
+  end: number;
+  line: string;
+}
+
+interface ParsedExport {
+  buf: Uint8Array;
+  commits: CommitRegion[];
+  resets: ResetRegion[];
+}
+
 /**
- * Binary-safe fast-export stream processor.
- * Parses commits to extract metadata, but preserves all binary blob data untouched.
- * Returns the commit metadata and a function to produce the modified stream.
+ * Binary-safe fast-export stream parser.
+ * Parses commit headers and messages, but only records the byte offsets of
+ * everything else so blob data is never decoded.
  */
-function parseFastExportBinary(
-  buf: Uint8Array,
-): {
-  commits: CommitMeta[];
-  rebuild: (
-    modifications: CommitModification[],
-    refRename?: RefRename,
-  ) => Uint8Array;
-} {
-  const commits: CommitMeta[] = [];
-  // Track commit regions for later replacement
-  const commitRegions: {
-    headerStart: number;
-    dataStart: number; // offset of "data N\n"
-    dataContentStart: number; // offset of message content after "data N\n"
-    dataLength: number; // N from "data N"
-    bodyStart: number; // offset after message content
-    bodyEnd: number; // end of commit block
-    authorLine: string;
-    committerLine: string;
-    message: string;
-    changeCount: number;
-  }[] = [];
-  // Track "reset <ref>" lines outside commits so the ref can be renamed
-  const resetRegions: { start: number; end: number; line: string }[] = [];
+function parseFastExportBinary(buf: Uint8Array): ParsedExport {
+  const commits: CommitRegion[] = [];
+  const resets: ResetRegion[] = [];
 
   let offset = 0;
   while (offset < buf.length) {
     if (startsWith(buf, offset, "commit ")) {
       const headerStart = offset;
+      const headerLines: string[] = [];
       let authorLine = "";
       let committerLine = "";
 
@@ -145,24 +142,19 @@ function parseFastExportBinary(
         const { line, next } = readLine(buf, offset);
         if (line.startsWith("author ")) authorLine = line;
         else if (line.startsWith("committer ")) committerLine = line;
+        headerLines.push(line);
         offset = next;
       }
 
       // Parse data section
       let message = "";
-      let dataLength = 0;
-      let dataStart = offset;
-      let dataContentStart = offset;
       if (startsWith(buf, offset, "data ")) {
         const { line, next } = readLine(buf, offset);
-        dataLength = parseInt(line.split(" ")[1]);
-        dataStart = offset;
-        dataContentStart = next;
+        const dataLength = parseInt(line.split(" ")[1]);
         offset = next;
 
         // Read exactly dataLength bytes as the message (commit messages are text)
-        const msgBytes = buf.subarray(offset, offset + dataLength);
-        message = decoder.decode(msgBytes);
+        message = decoder.decode(buf.subarray(offset, offset + dataLength));
         offset += dataLength;
 
         // Skip the LF after the data content if present
@@ -194,22 +186,16 @@ function parseFastExportBinary(
         offset = next;
       }
 
-      const bodyEnd = offset;
-
-      commitRegions.push({
+      commits.push({
         headerStart,
-        dataStart,
-        dataContentStart,
-        dataLength,
+        headerLines,
         bodyStart,
-        bodyEnd,
+        bodyEnd: offset,
         authorLine,
         committerLine,
         message,
         changeCount,
       });
-
-      commits.push({ authorLine, committerLine, message, changeCount });
     } else if (startsWith(buf, offset, "blob")) {
       // Skip blob: read past header and data section (binary-safe)
       const { next: afterBlob } = readLine(buf, offset);
@@ -235,102 +221,80 @@ function parseFastExportBinary(
       // Other lines (reset, tag, etc.) - skip line by line
       const { line, next } = readLine(buf, offset);
       if (line.startsWith("reset ")) {
-        resetRegions.push({ start: offset, end: next, line });
+        resets.push({ start: offset, end: next, line });
       }
       offset = next;
     }
   }
 
-  const rebuild = (
-    modifications: CommitModification[],
-    refRename?: RefRename,
-  ): Uint8Array => {
-    // Build modified output by replacing commit headers in-place.
-    // Only command/header lines are decoded and re-encoded; everything else
-    // (notably blob data) is copied byte-for-byte.
-    const chunks: Uint8Array[] = [];
-    let lastEnd = 0;
-    let resetIdx = 0;
+  return { buf, commits, resets };
+}
 
-    const renameCommand = (line: string, command: string): string => {
-      if (!refRename) return line;
-      return line === `${command} ${refRename.from}`
-        ? `${command} ${refRename.to}`
-        : line;
-    };
+/**
+ * Produce the modified stream: commit headers and messages are replaced, and
+ * the ref in "commit"/"reset" lines is optionally renamed. Everything else
+ * (notably blob data) is copied byte-for-byte.
+ */
+function rebuildFastExport(
+  { buf, commits, resets }: ParsedExport,
+  modifications: CommitModification[],
+  refRename?: RefRename,
+): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let lastEnd = 0;
+  let resetIdx = 0;
 
-    // Copy buf[lastEnd, until) unchanged, except for renamed reset lines.
-    const copyUntil = (until: number): void => {
-      while (
-        resetIdx < resetRegions.length &&
-        resetRegions[resetIdx].start < until
-      ) {
-        const reset = resetRegions[resetIdx++];
-        const renamed = renameCommand(reset.line, "reset");
-        if (renamed === reset.line) continue;
-        chunks.push(buf.subarray(lastEnd, reset.start));
-        chunks.push(encoder.encode(renamed + "\n"));
-        lastEnd = reset.end;
-      }
-      chunks.push(buf.subarray(lastEnd, until));
-      lastEnd = until;
-    };
-
-    for (let i = 0; i < commitRegions.length; i++) {
-      const region = commitRegions[i];
-      const mod = modifications[i];
-
-      // Copy everything before this commit's header unchanged
-      copyUntil(region.headerStart);
-
-      // Build new header
-      const headerLines: string[] = [];
-      let scanOffset = region.headerStart;
-      while (scanOffset < region.dataStart) {
-        const { line, next } = readLine(buf, scanOffset);
-        if (line.startsWith("author ")) {
-          headerLines.push(mod.authorLine);
-        } else if (line.startsWith("committer ")) {
-          headerLines.push(mod.committerLine);
-        } else if (line.startsWith("commit ")) {
-          headerLines.push(renameCommand(line, "commit"));
-        } else {
-          headerLines.push(line);
-        }
-        scanOffset = next;
-      }
-
-      // Write header
-      chunks.push(encoder.encode(headerLines.join("\n") + "\n"));
-
-      // Write new data section with modified message
-      const msgBytes = encoder.encode(mod.message);
-      chunks.push(encoder.encode(`data ${msgBytes.length}\n`));
-      chunks.push(msgBytes);
-      chunks.push(encoder.encode("\n"));
-
-      // Copy body unchanged (file ops)
-      chunks.push(buf.subarray(region.bodyStart, region.bodyEnd));
-
-      lastEnd = region.bodyEnd;
-    }
-
-    // Copy remaining data after last commit
-    copyUntil(buf.length);
-
-    // Concatenate all chunks
-    let totalLen = 0;
-    for (const c of chunks) totalLen += c.length;
-    const result = new Uint8Array(totalLen);
-    let pos = 0;
-    for (const c of chunks) {
-      result.set(c, pos);
-      pos += c.length;
-    }
-    return result;
+  const renameCommand = (line: string, command: string): string => {
+    if (!refRename) return line;
+    return line === `${command} ${refRename.from}`
+      ? `${command} ${refRename.to}`
+      : line;
   };
 
-  return { commits, rebuild };
+  // Copy buf[lastEnd, until) unchanged, except for renamed reset lines.
+  const copyUntil = (until: number): void => {
+    while (resetIdx < resets.length && resets[resetIdx].start < until) {
+      const reset = resets[resetIdx++];
+      const renamed = renameCommand(reset.line, "reset");
+      if (renamed === reset.line) continue;
+      chunks.push(buf.subarray(lastEnd, reset.start));
+      chunks.push(encoder.encode(renamed + "\n"));
+      lastEnd = reset.end;
+    }
+    chunks.push(buf.subarray(lastEnd, until));
+    lastEnd = until;
+  };
+
+  for (let i = 0; i < commits.length; i++) {
+    const commit = commits[i];
+    const mod = modifications[i];
+
+    // Copy everything before this commit's header unchanged
+    copyUntil(commit.headerStart);
+
+    const headerLines = commit.headerLines.map((line) => {
+      if (line.startsWith("author ")) return mod.authorLine;
+      if (line.startsWith("committer ")) return mod.committerLine;
+      if (line.startsWith("commit ")) return renameCommand(line, "commit");
+      return line;
+    });
+    chunks.push(encoder.encode(headerLines.join("\n") + "\n"));
+
+    // Write new data section with modified message
+    const msgBytes = encoder.encode(mod.message);
+    chunks.push(encoder.encode(`data ${msgBytes.length}\n`));
+    chunks.push(msgBytes);
+    chunks.push(encoder.encode("\n"));
+
+    // Copy body unchanged (file ops)
+    chunks.push(buf.subarray(commit.bodyStart, commit.bodyEnd));
+    lastEnd = commit.bodyEnd;
+  }
+
+  // Copy remaining data after last commit
+  copyUntil(buf.length);
+
+  return Buffer.concat(chunks);
 }
 
 interface RefRename {
@@ -364,7 +328,8 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   }
 
   const rawExport: Uint8Array = fullExportProc.stdout;
-  const { commits, rebuild } = parseFastExportBinary(rawExport);
+  const parsedExport = parseFastExportBinary(rawExport);
+  const { commits } = parsedExport;
 
   const originalTimestamps = commits.map((c) => {
     const parsed = parseAuthorLine(c.authorLine);
@@ -433,7 +398,8 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   // Rebuild the stream with modifications, pointing it at the target ref.
   // The rename is applied to parsed command lines only, so blob bytes are
   // never decoded/re-encoded (which would corrupt non-UTF-8 content).
-  const modifiedStream = rebuild(
+  const modifiedStream = rebuildFastExport(
+    parsedExport,
     modifications,
     targetRef !== branch
       ? { from: `refs/heads/${branch}`, to: `refs/heads/${targetRef}` }
