@@ -72,7 +72,7 @@ async function main() {
   );
   console.log();
 
-  const changes = await rewrite(config);
+  const { changes, backupRef } = await rewrite(config);
 
   if (config.dryRun) {
     console.log("Changes that would be applied:\n");
@@ -92,8 +92,13 @@ async function main() {
     }
   } else {
     console.log(`Rewrote ${changes.length} commit(s).`);
-    if (config.inPlace && config.backup) {
-      console.log(`Backup stored at: ${config.backup}`);
+    if (backupRef) {
+      console.log(`Backup of the original ${config.branch} stored at: ${backupRef}`);
+      if (backupRef !== config.backup) {
+        console.log(
+          `  (${config.backup} already held an earlier backup and was left unchanged)`,
+        );
+      }
     }
   }
 }

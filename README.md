@@ -95,8 +95,12 @@ branch, leaving your original history untouched. This holds for any ref you pass
 with `-b`, not only local branches: `-b origin/main` writes
 `herodotus/origin/main` and leaves `refs/remotes/origin/main` alone. Revisions
 that are not refs (a commit hash, `HEAD~2`) and annotated tags are refused;
-create a branch from them first. Use `--in-place` to rewrite directly (a backup
-ref is created automatically).
+create a branch from them first. Use `--in-place` to rewrite directly: the
+original commit is kept in `refs/original/herodotus/<branch>`. Backups are never
+overwritten; if that ref already exists (say, from an earlier in-place run), it
+is left as is and the backup goes to a timestamped
+`refs/original/herodotus/<branch>@<unix-ts>` instead. The output names the ref
+that holds the backup.
 
 ## Install & test
 

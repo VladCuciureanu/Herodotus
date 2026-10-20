@@ -309,10 +309,16 @@ interface CommitModification {
   message: string;
 }
 
+export interface RewriteResult {
+  changes: CommitInfo[];
+  /** Ref holding the pre-rewrite commit, when an in-place backup was made. */
+  backupRef?: string;
+}
+
 /**
  * Run the full rewrite pipeline.
  */
-export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
+export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
   const { repoPath, branch, schedule, seed } = config;
 
   // Export (keep as raw bytes)
@@ -390,7 +396,7 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
   }
 
   if (config.dryRun) {
-    return changeLog;
+    return { changes: changeLog };
   }
 
   // Outside in-place mode, point the stream at the new local branch. fast-export
@@ -409,9 +415,10 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
     refRename,
   );
 
-  // Create backup if in-place
+  // Create backup if in-place. An existing backup is never overwritten.
+  let backupRef: string | undefined;
   if (config.inPlace && config.backup) {
-    createBackupRef(repoPath, branch, config.backup);
+    backupRef = createBackupRef(repoPath, branch, config.backup);
   }
 
   // Import using raw bytes
@@ -435,5 +442,5 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
     throw new Error(`git fast-import failed: ${stderr}`);
   }
 
-  return changeLog;
+  return { changes: changeLog, backupRef };
 }

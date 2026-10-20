@@ -77,11 +77,26 @@ export function resolveRewriteTarget(
   return { source, target: `refs/heads/herodotus/${shortName}` };
 }
 
+/**
+ * Point a backup ref at the branch's current commit without ever overwriting an
+ * existing backup: if `backupRef` is taken (e.g. by an earlier in-place run),
+ * a timestamped `<backupRef>@<unix-ts>` is written instead. Returns the ref
+ * that holds the backup.
+ */
 export function createBackupRef(
   repoPath: string,
   branch: string,
   backupRef: string,
-): void {
-  const sha = run(["git", "rev-parse", branch], repoPath);
-  run(["git", "update-ref", backupRef, sha], repoPath);
+): string {
+  const sha = run(["git", "rev-parse", "--verify", `${branch}^{commit}`], repoPath);
+  const ts = Math.floor(Date.now() / 1000);
+  const candidates = [backupRef, `${backupRef}@${ts}`];
+  for (let n = 2; n <= 100; n++) candidates.push(`${backupRef}@${ts}-${n}`);
+  for (const ref of candidates) {
+    if (branchExists(repoPath, ref)) continue;
+    // An empty old value makes update-ref fail if the ref appeared meanwhile.
+    run(["git", "update-ref", ref, sha, ""], repoPath);
+    return ref;
+  }
+  throw new Error(`Could not find a free backup ref name under ${backupRef}`);
 }

@@ -103,7 +103,7 @@ describe("rewriter", () => {
   });
 
   it("dry run reports changes without modifying repo", async () => {
-    const changes = await rewrite(makeConfig({ dryRun: true }));
+    const { changes } = await rewrite(makeConfig({ dryRun: true }));
     assert.equal(changes.length, 3);
     const log = git(["log", "--oneline"], repoDir);
     assert.ok(log.includes("Fix bug"));
@@ -189,6 +189,27 @@ describe("rewriter", () => {
       assert.equal(line, "New Author <new@example.com>");
     }
     assert.equal(git(["status", "--porcelain"], repoDir), "");
+  });
+
+  it("keeps the first backup when rewriting in place twice", async () => {
+    const originalHead = git(["rev-parse", "main"], repoDir);
+    const backup = "refs/original/herodotus/main";
+
+    await rewrite(makeConfig({ inPlace: true, backup }));
+    const firstRewrite = git(["rev-parse", "main"], repoDir);
+    const second = await rewrite(makeConfig({ inPlace: true, backup, seed: 7 }));
+
+    assert.equal(git(["rev-parse", backup], repoDir), originalHead);
+    const refs = git(
+      ["for-each-ref", "--format=%(refname) %(objectname)", "refs/original/"],
+      repoDir,
+    ).split("\n");
+    assert.equal(refs.length, 2);
+    const extra = refs.find((r) => !r.startsWith(`${backup} `));
+    assert.match(extra ?? "", /^refs\/original\/herodotus\/main@\d+ /);
+    const [extraRef, extraSha] = extra!.split(" ");
+    assert.equal(extraSha, firstRewrite);
+    assert.equal(second.backupRef, extraRef);
   });
 
   it("never overwrites a non-branch source ref in default mode", async () => {
@@ -282,6 +303,37 @@ describe("herodotus CLI end to end", () => {
     for (const line of authors.split("\n")) {
       assert.equal(line, "Ada Lovelace <ada@example.com>");
     }
+  });
+
+  it("reports a new timestamped backup ref on a second --in-place run", () => {
+    const originalHead = git(["rev-parse", "main"], repoDir);
+    const run = () =>
+      spawnSync(process.execPath, [
+        mainScript,
+        "-i",
+        "Ada Lovelace:ada@example.com",
+        "--in-place",
+        "--seed",
+        "7",
+        repoDir,
+      ], { encoding: "utf8" });
+
+    const first = run();
+    assert.equal(first.status, 0, first.stderr);
+    assert.match(first.stdout, /stored at: refs\/original\/herodotus\/main\n/);
+    const firstRewrite = git(["rev-parse", "main"], repoDir);
+
+    const second = run();
+    assert.equal(second.status, 0, second.stderr);
+    const m = second.stdout.match(
+      /stored at: (refs\/original\/herodotus\/main@\d+)\n/,
+    );
+    assert.ok(m, second.stdout);
+    assert.equal(git(["rev-parse", m[1]], repoDir), firstRewrite);
+    assert.equal(
+      git(["rev-parse", "refs/original/herodotus/main"], repoDir),
+      originalHead,
+    );
   });
 
   it("writes -b origin/main to herodotus/origin/main, leaving the remote ref", () => {
