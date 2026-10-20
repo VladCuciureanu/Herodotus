@@ -4,7 +4,7 @@ import process from "node:process";
 import type { HerodotusConfig, Identity } from "./types.ts";
 import {
   buildConfig,
-  buildDefaultSchedule,
+  type ConfigOverrides,
   loadConfigAsync,
   parseSchedule,
 } from "./config.ts";
@@ -53,7 +53,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
 
   const fileConfig = await loadConfigAsync(values.config, repoPath);
 
-  const cliArgs: Partial<HerodotusConfig> = {};
+  const cliArgs: ConfigOverrides = {};
 
   if (values.identity && values.identity.length > 0) {
     cliArgs.identities = values.identity.map(parseIdentity);
@@ -72,22 +72,14 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
     cliArgs.seed = seed;
   }
 
-  if (
-    values.start || values.end || values.timezone || values["allowed-days"] ||
-    values["start-date"] || values["end-date"]
-  ) {
-    cliArgs.schedule = {
-      ...buildDefaultSchedule(),
-      ...parseSchedule({
-        start: values.start,
-        end: values.end,
-        timezone: values.timezone,
-        allowedDays: values["allowed-days"]?.split(","),
-        startDate: values["start-date"],
-        endDate: values["end-date"],
-      }),
-    };
-  }
+  cliArgs.schedule = parseSchedule({
+    start: values.start,
+    end: values.end,
+    timezone: values.timezone,
+    allowedDays: values["allowed-days"]?.split(","),
+    startDate: values["start-date"],
+    endDate: values["end-date"],
+  });
 
   return buildConfig(cliArgs, fileConfig, repoPath);
 }

@@ -95,6 +95,14 @@ export function parseSchedule(input: ScheduleInput): Partial<ScheduleConfig> {
   return schedule;
 }
 
+/**
+ * Config from a single source (file or CLI). The schedule may be partial so
+ * that sources can be merged field by field.
+ */
+export type ConfigOverrides = Omit<Partial<HerodotusConfig>, "schedule"> & {
+  schedule?: Partial<ScheduleConfig>;
+};
+
 interface TomlConfig {
   identity?: Array<{ name: string; email: string }>;
   schedule?: ScheduleInput;
@@ -103,14 +111,14 @@ interface TomlConfig {
 export async function loadConfigAsync(
   configPath: string | undefined,
   repoPath: string,
-): Promise<Partial<HerodotusConfig>> {
+): Promise<ConfigOverrides> {
   const filePath = resolve(repoPath, configPath ?? ".herodotus.toml");
   if (!existsSync(filePath)) return {};
 
   const content = await readFile(filePath, "utf8");
   const toml = parseToml(content) as unknown as TomlConfig;
 
-  const result: Partial<HerodotusConfig> = {};
+  const result: ConfigOverrides = {};
 
   if (toml.identity && toml.identity.length > 0) {
     result.identities = toml.identity.map((i) => ({
@@ -120,10 +128,7 @@ export async function loadConfigAsync(
   }
 
   if (toml.schedule) {
-    result.schedule = {
-      ...buildDefaultSchedule(),
-      ...parseSchedule(toml.schedule),
-    };
+    result.schedule = parseSchedule(toml.schedule);
   }
 
   return result;
@@ -140,13 +145,15 @@ export function buildDefaultSchedule(): ScheduleConfig {
 }
 
 export function buildConfig(
-  cliArgs: Partial<HerodotusConfig>,
-  fileConfig: Partial<HerodotusConfig>,
+  cliArgs: ConfigOverrides,
+  fileConfig: ConfigOverrides,
   repoPath: string,
 ): HerodotusConfig {
   const identities = cliArgs.identities ??
     fileConfig.identities ?? [getDefaultIdentity(repoPath)];
 
+  // Each source only carries the fields it set, so later sources override
+  // earlier ones field by field.
   const schedule: ScheduleConfig = {
     ...buildDefaultSchedule(),
     ...fileConfig.schedule,
