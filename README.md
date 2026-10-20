@@ -89,7 +89,8 @@ JavaScript's `Date` parses, e.g. `2026-01-05T09:00:00Z`. A date-time without
 With no `-i`, no `[[identity]]` in the config and no git `user.name` and
 `user.email`, the run fails.
 
-Errors go to stderr with exit code 1.
+Errors are printed as one line on stderr, prefixed `herodotus:`, and exit with
+code 1. This includes unknown options.
 
 ### Config file
 

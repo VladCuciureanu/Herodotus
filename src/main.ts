@@ -23,13 +23,11 @@ async function main() {
 
   // Safety checks
   if (!config.dryRun && !isWorkingTreeClean(config.repoPath)) {
-    console.error("Error: working tree has uncommitted changes. Commit or stash them first.");
-    process.exit(1);
+    throw new Error("working tree has uncommitted changes. Commit or stash them first.");
   }
 
   if (!branchExists(config.repoPath, config.branch)) {
-    console.error(`Error: branch "${config.branch}" does not exist.`);
-    process.exit(1);
+    throw new Error(`branch "${config.branch}" does not exist.`);
   }
 
   // Refuses non-refs, ambiguous names and annotated tags in both modes.
@@ -37,10 +35,7 @@ async function main() {
   const { target } = resolveRewriteTarget(config.repoPath, config.branch);
   const targetName = target.replace(/^refs\/heads\//, "");
   if (!config.inPlace && branchExists(config.repoPath, target)) {
-    console.error(
-      `Error: branch "${targetName}" already exists. Delete it first or use --in-place.`,
-    );
-    process.exit(1);
+    throw new Error(`branch "${targetName}" already exists. Delete it first or use --in-place.`);
   }
 
   console.log(`Herodotus: rewriting ${config.branch}${config.dryRun ? " (dry run)" : ""}`);
@@ -82,7 +77,16 @@ async function main() {
   }
 }
 
+/** One line on stderr, without a stack trace; git's multi-line output is joined. */
+function formatError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const line = message.trim().replace(/\s*\n\s*/g, " ");
+  const isUsageError =
+    err instanceof Error && "code" in err && String(err.code).startsWith("ERR_PARSE_ARGS");
+  return `herodotus: ${line}${isUsageError ? " See herodotus --help." : ""}`;
+}
+
 main().catch((err) => {
-  console.error(`Error: ${err.message}`);
-  process.exit(1);
+  console.error(formatError(err));
+  process.exitCode = 1;
 });
