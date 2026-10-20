@@ -97,6 +97,11 @@ export function resolveRewriteTarget(repoPath: string, branch: string): RewriteT
   return { source, target: `refs/heads/herodotus/${shortName}` };
 }
 
+/** Where an in-place rewrite of `branch` saves the ref's old value. */
+export function defaultBackupRef(branch: string): string {
+  return `refs/original/herodotus/${branch}`;
+}
+
 /**
  * Point a backup ref at exactly the object the ref holds (never peeled, so a
  * tag object would stay referenced) without ever overwriting an

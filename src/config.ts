@@ -257,7 +257,6 @@ export function buildConfig(
     dryRun: cliArgs.dryRun ?? false,
     branch,
     repoPath,
-    backup: cliArgs.backup ?? `refs/original/herodotus/${branch}`,
     seed: cliArgs.seed ?? Date.now(),
   };
 }

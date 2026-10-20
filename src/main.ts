@@ -3,7 +3,12 @@ import process from "node:process";
 import { parseCli, parseInitCli, printUsage, UsageError } from "./cli.ts";
 import { runInit } from "./init.ts";
 import { rewrite } from "./rewriter.ts";
-import { branchExists, isWorkingTreeClean, resolveRewriteTarget } from "./utils.ts";
+import {
+  branchExists,
+  defaultBackupRef,
+  isWorkingTreeClean,
+  resolveRewriteTarget,
+} from "./utils.ts";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -70,8 +75,9 @@ async function main() {
     console.log(`Rewrote ${changes.length} commit(s).`);
     if (backupRef) {
       console.log(`Backup of the original ${config.branch} stored at: ${backupRef}`);
-      if (backupRef !== config.backup) {
-        console.log(`  (${config.backup} already held an earlier backup and was left unchanged)`);
+      const defaultRef = defaultBackupRef(config.branch);
+      if (backupRef !== defaultRef) {
+        console.log(`  (${defaultRef} already held an earlier backup and was left unchanged)`);
       }
     }
   }

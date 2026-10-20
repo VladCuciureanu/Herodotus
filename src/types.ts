@@ -18,7 +18,6 @@ export interface HerodotusConfig {
   dryRun: boolean;
   branch: string;
   repoPath: string;
-  backup: string | false;
   seed: number;
 }
 

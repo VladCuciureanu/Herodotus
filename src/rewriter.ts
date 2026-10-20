@@ -4,7 +4,7 @@ import { capitalizeConventionalCommit } from "./commit-message.ts";
 import { createIdentityPicker } from "./identity.ts";
 import { redistributeTimestamps } from "./timeline.ts";
 import type { CommitInfo, HerodotusConfig, Identity } from "./types.ts";
-import { createBackupRef, resolveRewriteTarget } from "./utils.ts";
+import { createBackupRef, defaultBackupRef, resolveRewriteTarget } from "./utils.ts";
 
 const LF = 0x0a; // '\n'
 const encoder = new TextEncoder();
@@ -398,11 +398,11 @@ export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
     config.inPlace ? undefined : { from: source, to: target },
   );
 
-  // Create backup if in-place. An existing backup is never overwritten.
-  let backupRef: string | undefined;
-  if (config.inPlace && config.backup) {
-    backupRef = createBackupRef(repoPath, source, config.backup);
-  }
+  // Always back up before rewriting in place. An existing backup is never
+  // overwritten.
+  const backupRef = config.inPlace
+    ? createBackupRef(repoPath, source, defaultBackupRef(branch))
+    : undefined;
 
   // Import using raw bytes
   const importProc = spawn("git", ["fast-import", "--force", "--quiet"], {
