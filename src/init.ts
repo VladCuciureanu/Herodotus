@@ -1,32 +1,31 @@
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { stringify } from "smol-toml";
+import { run } from "./utils.ts";
 
 function getGitConfig(key: string, cwd: string): string | null {
-  const result = spawnSync("git", ["config", key], {
-    cwd,
-    encoding: "utf8",
-  });
-  if (result.status !== 0) return null;
-  return result.stdout.trim();
+  try {
+    return run(["git", "config", key], cwd);
+  } catch {
+    return null;
+  }
 }
 
-export async function runInit(repoPath: string): Promise<void> {
-  const configPath = resolve(repoPath, ".herodotus.toml");
+/** Write a starter config to `configPath` (relative to the repo), never overwriting. */
+export async function runInit(repoPath: string, configPath = ".herodotus.toml"): Promise<void> {
+  const filePath = resolve(repoPath, configPath);
 
-  if (existsSync(configPath)) {
-    throw new Error(".herodotus.toml already exists.");
+  if (existsSync(filePath)) {
+    throw new Error(`${configPath} already exists.`);
   }
 
   const name = getGitConfig("user.name", repoPath) ?? "Your Name";
   const email = getGitConfig("user.email", repoPath) ?? "you@example.com";
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  const content = `[[identity]]
-name = "${name}"
-email = "${email}"
-
+  // stringify escapes quotes and backslashes in the git name and email.
+  const content = `${stringify({ identity: [{ name, email }] })}
 [schedule]
 # start = "09:00"
 # end = "18:00"
@@ -36,6 +35,6 @@ email = "${email}"
 # endDate = "2026-12-31T18:00:00"
 `;
 
-  await writeFile(configPath, content);
-  console.log(`Created .herodotus.toml`);
+  await writeFile(filePath, content);
+  console.log(`Created ${configPath}`);
 }

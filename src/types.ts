@@ -8,7 +8,7 @@ export interface ScheduleConfig {
   end: number;
   timezone: string;
   allowedDays: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
-  anchor: { type: "start"; date: Date } | { type: "end"; date: Date };
+  anchor: { type: "start" | "end"; date: Date };
 }
 
 export interface HerodotusConfig {
@@ -18,19 +18,14 @@ export interface HerodotusConfig {
   dryRun: boolean;
   branch: string;
   repoPath: string;
-  backup: string | false;
   seed: number;
 }
 
 export interface CommitInfo {
   index: number;
   originalAuthor: Identity;
-  originalCommitter: Identity;
   authorDate: string; // raw fast-export format: "timestamp tz"
-  commitDate: string;
   message: string;
   newAuthor: Identity;
-  newCommitter: Identity;
   newAuthorDate: string;
-  newCommitDate: string;
 }

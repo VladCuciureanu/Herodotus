@@ -1,17 +1,23 @@
 #!/usr/bin/env node
-import { resolve } from "node:path";
 import process from "node:process";
-import { parseCli, printUsage } from "./cli.ts";
+import { parseCli, parseInitCli, printUsage, UsageError } from "./cli.ts";
+import { formatTime } from "./config.ts";
 import { runInit } from "./init.ts";
 import { rewrite } from "./rewriter.ts";
-import { branchExists, isWorkingTreeClean, resolveRewriteTarget } from "./utils.ts";
+import {
+  branchExists,
+  defaultBackupRef,
+  isWorkingTreeClean,
+  resolveRewriteTarget,
+} from "./utils.ts";
 
 async function main() {
   const args = process.argv.slice(2);
 
   if (args[0] === "init") {
-    const repoPath = resolve(args[1] ?? ".");
-    await runInit(repoPath);
+    const options = parseInitCli(args.slice(1));
+    if (!options) printUsage();
+    else await runInit(options.repoPath, options.configPath);
     return;
   }
 
@@ -23,39 +29,30 @@ async function main() {
 
   // Safety checks
   if (!config.dryRun && !isWorkingTreeClean(config.repoPath)) {
-    console.error("Error: working tree has uncommitted changes. Commit or stash them first.");
-    process.exit(1);
+    throw new Error("working tree has uncommitted changes. Commit or stash them first.");
   }
 
   if (!branchExists(config.repoPath, config.branch)) {
-    console.error(`Error: branch "${config.branch}" does not exist.`);
-    process.exit(1);
+    throw new Error(`ref "${config.branch}" does not exist.`);
   }
 
   // Refuses non-refs, ambiguous names and annotated tags in both modes.
   // Default mode writes to a new local branch and never touches the source ref.
-  const { target } = resolveRewriteTarget(config.repoPath, config.branch);
+  const refs = resolveRewriteTarget(config.repoPath, config.branch);
+  const { target } = refs;
   const targetName = target.replace(/^refs\/heads\//, "");
   if (!config.inPlace && branchExists(config.repoPath, target)) {
-    console.error(
-      `Error: branch "${targetName}" already exists. Delete it first or use --in-place.`,
-    );
-    process.exit(1);
+    throw new Error(`branch "${targetName}" already exists. Delete it first or use --in-place.`);
   }
 
   console.log(`Herodotus: rewriting ${config.branch}${config.dryRun ? " (dry run)" : ""}`);
   console.log(`  Identities: ${config.identities.map((i) => `${i.name} <${i.email}>`).join(", ")}`);
-  console.log(
-    `  Schedule: ${Math.floor(config.schedule.start / 60)}:${String(
-      config.schedule.start % 60,
-    ).padStart(2, "0")} – ${Math.floor(config.schedule.end / 60)}:${String(
-      config.schedule.end % 60,
-    ).padStart(2, "0")} ${config.schedule.timezone}`,
-  );
+  const { start, end, timezone } = config.schedule;
+  console.log(`  Schedule: ${formatTime(start)} – ${formatTime(end)} ${timezone}`);
   console.log(`  Mode: ${config.inPlace ? "in-place" : `new branch ${targetName}`}`);
   console.log();
 
-  const { changes, backupRef } = await rewrite(config);
+  const { changes, backupRef } = await rewrite(config, { refs });
 
   if (config.dryRun) {
     console.log("Changes that would be applied:\n");
@@ -75,14 +72,25 @@ async function main() {
     console.log(`Rewrote ${changes.length} commit(s).`);
     if (backupRef) {
       console.log(`Backup of the original ${config.branch} stored at: ${backupRef}`);
-      if (backupRef !== config.backup) {
-        console.log(`  (${config.backup} already held an earlier backup and was left unchanged)`);
+      const defaultRef = defaultBackupRef(config.branch);
+      if (backupRef !== defaultRef) {
+        console.log(`  (${defaultRef} already held an earlier backup and was left unchanged)`);
       }
     }
   }
 }
 
+/** One line on stderr, without a stack trace; git's multi-line output is joined. */
+function formatError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const line = message.trim().replace(/\s*\n\s*/g, " ");
+  const isUsageError =
+    err instanceof UsageError ||
+    (err instanceof Error && "code" in err && String(err.code).startsWith("ERR_PARSE_ARGS"));
+  return `herodotus: ${line}${isUsageError ? " See herodotus --help." : ""}`;
+}
+
 main().catch((err) => {
-  console.error(`Error: ${err.message}`);
-  process.exit(1);
+  console.error(formatError(err));
+  process.exitCode = 1;
 });

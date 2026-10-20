@@ -95,7 +95,6 @@ describe("rewriter", () => {
       dryRun: false,
       branch: "main",
       repoPath: repoDir,
-      backup: false,
       seed: 42,
       ...overrides,
     };
@@ -175,7 +174,7 @@ describe("rewriter", () => {
     const originalBlob = git(["rev-parse", "main:blob.bin"], repoDir);
     const backup = "refs/original/herodotus/main";
 
-    await rewrite(makeConfig({ inPlace: true, backup }));
+    await rewrite(makeConfig({ inPlace: true }));
 
     assert.equal(git(["rev-parse", backup], repoDir), originalHead);
     assert.notEqual(git(["rev-parse", "main"], repoDir), originalHead);
@@ -193,9 +192,9 @@ describe("rewriter", () => {
     const originalHead = git(["rev-parse", "main"], repoDir);
     const backup = "refs/original/herodotus/main";
 
-    await rewrite(makeConfig({ inPlace: true, backup }));
+    await rewrite(makeConfig({ inPlace: true }));
     const firstRewrite = git(["rev-parse", "main"], repoDir);
-    const second = await rewrite(makeConfig({ inPlace: true, backup, seed: 7 }));
+    const second = await rewrite(makeConfig({ inPlace: true, seed: 7 }));
 
     assert.equal(git(["rev-parse", backup], repoDir), originalHead);
     const refs = git(
@@ -211,15 +210,21 @@ describe("rewriter", () => {
     assert.equal(second.backupRef, extraRef);
   });
 
+  it("always backs up an in-place rewrite, under the ref's name", async () => {
+    const originalHead = git(["rev-parse", "main"], repoDir);
+    git(["update-ref", "refs/remotes/origin/main", originalHead], repoDir);
+
+    const { backupRef } = await rewrite(makeConfig({ branch: "origin/main", inPlace: true }));
+
+    assert.equal(backupRef, "refs/original/herodotus/origin/main");
+    assert.equal(git(["rev-parse", backupRef], repoDir), originalHead);
+    assert.notEqual(git(["rev-parse", "refs/remotes/origin/main"], repoDir), originalHead);
+  });
+
   it("refuses an annotated tag in in-place mode and keeps the tag object", async () => {
     git(["tag", "-a", "v1", "-m", "release"], repoDir);
     const tagObject = git(["rev-parse", "refs/tags/v1"], repoDir);
-    const backup = "refs/original/herodotus/v1";
-
-    await assert.rejects(
-      rewrite(makeConfig({ branch: "v1", inPlace: true, backup })),
-      /annotated tag/,
-    );
+    await assert.rejects(rewrite(makeConfig({ branch: "v1", inPlace: true })), /annotated tag/);
 
     assert.equal(git(["rev-parse", "refs/tags/v1"], repoDir), tagObject);
     assert.equal(git(["cat-file", "-t", "refs/tags/v1"], repoDir), "tag");
@@ -229,12 +234,12 @@ describe("rewriter", () => {
   it("refuses non-ref revisions in in-place mode", async () => {
     const head = git(["rev-parse", "main"], repoDir);
     await assert.rejects(
-      rewrite(makeConfig({ branch: head, inPlace: true, backup: false })),
+      rewrite(makeConfig({ branch: head, inPlace: true })),
       /does not name a branch or other ref/,
     );
     git(["checkout", "-q", "--detach"], repoDir);
     await assert.rejects(
-      rewrite(makeConfig({ branch: "HEAD", inPlace: true, backup: false })),
+      rewrite(makeConfig({ branch: "HEAD", inPlace: true })),
       /does not name a branch or other ref/,
     );
     assert.equal(git(["rev-parse", "main"], repoDir), head);

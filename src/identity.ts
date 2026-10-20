@@ -1,21 +1,8 @@
 import { seededRandom } from "./random.ts";
 import type { Identity } from "./types.ts";
 
-export function createIdentityPicker(
-  identities: Identity[],
-  seed: number,
-): (index: number) => Identity {
-  if (identities.length === 1) {
-    return () => identities[0];
-  }
-
+/** Pick one of `identities` for each of `count` commits, reproducibly from `seed`. */
+export function pickIdentities(identities: Identity[], seed: number, count: number): Identity[] {
   const rng = seededRandom(seed);
-  const picks: number[] = [];
-
-  return (index: number): Identity => {
-    while (picks.length <= index) {
-      picks.push(Math.floor(rng() * identities.length));
-    }
-    return identities[picks[index]];
-  };
+  return Array.from({ length: count }, () => identities[Math.floor(rng() * identities.length)]);
 }

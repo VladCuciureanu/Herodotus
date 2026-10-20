@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { parse as parseToml } from "smol-toml";
-import type { HerodotusConfig, ScheduleConfig } from "./types.ts";
+import { parse as parseToml, TomlError } from "smol-toml";
+import type { HerodotusConfig, Identity, ScheduleConfig } from "./types.ts";
 import { getCurrentBranch, getDefaultIdentity } from "./utils.ts";
 
 export function parseTime(s: string): number {
@@ -16,7 +16,12 @@ export function parseTime(s: string): number {
   return h * 60 + m;
 }
 
-const DAY_MAP: Record<string, number> = {
+/** Minutes from midnight as "H:MM", the inverse of parseTime. */
+export function formatTime(minutes: number): string {
+  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+export const DAY_MAP: Record<string, number> = {
   sun: 0,
   mon: 1,
   tue: 2,
@@ -35,7 +40,10 @@ const DAY_MAP: Record<string, number> = {
 
 export const DEFAULT_ALLOWED_DAYS = [1, 2, 3, 4, 5, 6]; // Mon-Sat
 
-export function parseAnchor(startDate?: string, endDate?: string): ScheduleConfig["anchor"] {
+export function parseAnchor(
+  startDate?: string | Date,
+  endDate?: string | Date,
+): ScheduleConfig["anchor"] {
   if (startDate && endDate) {
     throw new Error("Cannot specify both --start-date and --end-date. Choose one.");
   }
@@ -70,8 +78,8 @@ export interface ScheduleInput {
   end?: string;
   timezone?: string;
   allowedDays?: string[];
-  startDate?: string;
-  endDate?: string;
+  startDate?: string | Date;
+  endDate?: string | Date;
 }
 
 /**
@@ -98,35 +106,113 @@ export type ConfigOverrides = Omit<Partial<HerodotusConfig>, "schedule"> & {
   schedule?: Partial<ScheduleConfig>;
 };
 
-interface TomlConfig {
-  identity?: Array<{ name: string; email: string }>;
-  schedule?: ScheduleInput;
+/** What a config file can set. */
+export interface FileConfig {
+  identities?: Identity[];
+  schedule?: Partial<ScheduleConfig>;
 }
 
-export async function loadConfigAsync(
-  configPath: string | undefined,
-  repoPath: string,
-): Promise<ConfigOverrides> {
-  const filePath = resolve(repoPath, configPath ?? ".herodotus.toml");
-  if (!existsSync(filePath)) return {};
+type Table = Record<string, unknown>;
 
-  const content = await readFile(filePath, "utf8");
-  const toml = parseToml(content) as unknown as TomlConfig;
+function isTable(value: unknown): value is Table {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-  const result: ConfigOverrides = {};
+function checkKeys(table: Table, allowed: readonly string[], prefix: string): void {
+  for (const key of Object.keys(table)) {
+    if (!allowed.includes(key)) {
+      throw new Error(`unknown key "${prefix}${key}"; expected one of ${allowed.join(", ")}`);
+    }
+  }
+}
 
-  if (toml.identity && toml.identity.length > 0) {
-    result.identities = toml.identity.map((i) => ({
-      name: i.name,
-      email: i.email,
-    }));
+function optionalString(table: Table, key: string, prefix: string): string | undefined {
+  const value = table[key];
+  if (value !== undefined && typeof value !== "string") {
+    throw new Error(`"${prefix}${key}" must be a string`);
+  }
+  return value;
+}
+
+function parseTomlIdentity(entry: unknown, n: number): Identity {
+  const prefix = `identity[${n}].`;
+  if (!isTable(entry)) throw new Error(`each [[identity]] must be a table with name and email`);
+  checkKeys(entry, ["name", "email"], prefix);
+  const name = optionalString(entry, "name", prefix);
+  const email = optionalString(entry, "email", prefix);
+  if (!name?.trim() || !email?.trim())
+    throw new Error(`[[identity]] #${n + 1} needs a non-empty name and email`);
+  return { name, email };
+}
+
+const SCHEDULE_KEYS = ["start", "end", "timezone", "allowedDays", "startDate", "endDate"];
+
+function parseTomlSchedule(schedule: unknown): ScheduleInput {
+  if (!isTable(schedule)) throw new Error(`"schedule" must be a table`);
+  checkKeys(schedule, SCHEDULE_KEYS, "schedule.");
+  const { allowedDays, startDate, endDate } = schedule;
+  if (
+    allowedDays !== undefined &&
+    !(Array.isArray(allowedDays) && allowedDays.every((d) => typeof d === "string"))
+  ) {
+    throw new Error(`"schedule.allowedDays" must be an array of strings`);
+  }
+  // TOML date-times (unquoted) parse to Dates, which new Date() accepts too.
+  for (const [key, value] of Object.entries({ startDate, endDate })) {
+    if (value !== undefined && typeof value !== "string" && !(value instanceof Date)) {
+      throw new Error(`"schedule.${key}" must be a date string`);
+    }
+  }
+  return {
+    start: optionalString(schedule, "start", "schedule."),
+    end: optionalString(schedule, "end", "schedule."),
+    timezone: optionalString(schedule, "timezone", "schedule."),
+    allowedDays,
+    startDate: startDate as ScheduleInput["startDate"],
+    endDate: endDate as ScheduleInput["endDate"],
+  };
+}
+
+/** Validate a parsed config file; throws on unknown keys and malformed values. */
+function parseConfigFile(toml: Table): FileConfig {
+  checkKeys(toml, ["identity", "schedule"], "");
+  const result: FileConfig = {};
+
+  if (toml.identity !== undefined) {
+    if (!Array.isArray(toml.identity)) {
+      throw new Error(`"identity" must be written as [[identity]] tables`);
+    }
+    if (toml.identity.length > 0) result.identities = toml.identity.map(parseTomlIdentity);
   }
 
-  if (toml.schedule) {
-    result.schedule = parseSchedule(toml.schedule);
+  if (toml.schedule !== undefined) {
+    result.schedule = parseSchedule(parseTomlSchedule(toml.schedule));
   }
 
   return result;
+}
+
+export async function loadConfig(
+  configPath: string | undefined,
+  repoPath: string,
+): Promise<FileConfig> {
+  const filePath = resolve(repoPath, configPath ?? ".herodotus.toml");
+  if (!existsSync(filePath)) {
+    // Only the default file is optional; a file named with -c must exist.
+    if (configPath !== undefined) throw new Error(`Config file not found: ${filePath}`);
+    return {};
+  }
+
+  const content = await readFile(filePath, "utf8");
+  try {
+    return parseConfigFile(parseToml(content));
+  } catch (err) {
+    if (err instanceof TomlError) {
+      const reason = err.message.split("\n")[0];
+      throw new Error(`${filePath}:${err.line}:${err.column}: ${reason}`);
+    }
+    throw new Error(`${filePath}: ${(err as Error).message}`);
+  }
 }
 
 export function buildDefaultSchedule(): ScheduleConfig {
@@ -141,7 +227,7 @@ export function buildDefaultSchedule(): ScheduleConfig {
 
 export function buildConfig(
   cliArgs: ConfigOverrides,
-  fileConfig: ConfigOverrides,
+  fileConfig: FileConfig,
   repoPath: string,
 ): HerodotusConfig {
   const identities = cliArgs.identities ?? fileConfig.identities ?? [getDefaultIdentity(repoPath)];
@@ -153,8 +239,16 @@ export function buildConfig(
     ...fileConfig.schedule,
     ...cliArgs.schedule,
   };
+  if (schedule.start >= schedule.end) {
+    throw new Error(
+      `Workday start (${formatTime(schedule.start)}) must be before its end (${formatTime(schedule.end)})`,
+    );
+  }
+  if (schedule.allowedDays.length === 0) {
+    throw new Error("allowedDays must name at least one day");
+  }
 
-  const branch = cliArgs.branch ?? fileConfig.branch ?? getCurrentBranch(repoPath);
+  const branch = cliArgs.branch ?? getCurrentBranch(repoPath);
 
   return {
     identities,
@@ -163,7 +257,6 @@ export function buildConfig(
     dryRun: cliArgs.dryRun ?? false,
     branch,
     repoPath,
-    backup: cliArgs.backup ?? `refs/original/herodotus/${branch}`,
     seed: cliArgs.seed ?? Date.now(),
   };
 }

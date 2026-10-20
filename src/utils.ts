@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import type { Identity } from "./types.ts";
 
-function run(cmd: string[], cwd: string): string {
+export function run(cmd: string[], cwd: string): string {
   const result = spawnSync(cmd[0], cmd.slice(1), {
     cwd,
     encoding: "utf8",
@@ -95,6 +95,11 @@ export function resolveRewriteTarget(repoPath: string, branch: string): RewriteT
   // "heads/" prefix for a name that also exists as a tag.
   const shortName = source.replace(/^refs\/(?:(?:heads|remotes|tags)\/)?/, "");
   return { source, target: `refs/heads/herodotus/${shortName}` };
+}
+
+/** Where an in-place rewrite of `branch` saves the ref's old value. */
+export function defaultBackupRef(branch: string): string {
+  return `refs/original/herodotus/${branch}`;
 }
 
 /**

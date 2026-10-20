@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { parse as parseToml } from "smol-toml";
 import { parseCli } from "../src/cli.ts";
 import { parseSchedule } from "../src/config.ts";
 import { runInit } from "../src/init.ts";
@@ -104,6 +106,72 @@ endDate = "2024-06-01T12:00:00Z"
   });
 });
 
+describe("config file validation", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "herodotus-validate-"));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  async function rejectsFile(content: string, pattern: RegExp): Promise<void> {
+    writeFileSync(join(dir, ".herodotus.toml"), content);
+    await assert.rejects(parseCli(["-i", "A:a@example.com", "-b", "main", dir]), (err: Error) => {
+      assert.ok(err.message.startsWith(join(dir, ".herodotus.toml")), err.message);
+      assert.match(err.message, pattern);
+      assert.doesNotMatch(err.message, /\n/);
+      return true;
+    });
+  }
+
+  it("rejects unknown top-level and schedule keys", async () => {
+    await rejectsFile('branch = "main"\n', /unknown key "branch"/);
+    await rejectsFile('[schedule]\nstrat = "09:00"\n', /unknown key "schedule\.strat"/);
+    await rejectsFile(
+      '[[identity]]\nname = "A"\nemail = "a@x"\nmail = "b"\n',
+      /identity\[0\]\.mail/,
+    );
+  });
+
+  it("rejects identities without a name or email", async () => {
+    await rejectsFile('[[identity]]\nname = "A"\n', /#1 needs a non-empty name and email/);
+    await rejectsFile(
+      '[[identity]]\nname = "A"\nemail = "a@x"\n[[identity]]\nemail = "b@x"\n',
+      /#2 needs/,
+    );
+    await rejectsFile('[[identity]]\nname = ""\nemail = "a@x"\n', /#1 needs/);
+    await rejectsFile(
+      '[[identity]]\nname = 1\nemail = "a@x"\n',
+      /"identity\[0\]\.name" must be a string/,
+    );
+    await rejectsFile('identity = "A"\n', /\[\[identity\]\] tables/);
+  });
+
+  it("rejects values of the wrong type", async () => {
+    await rejectsFile("schedule = 1\n", /"schedule" must be a table/);
+    await rejectsFile("[schedule]\nstart = 9\n", /"schedule\.start" must be a string/);
+    await rejectsFile('[schedule]\nallowedDays = "Mon"\n', /allowedDays" must be an array/);
+    await rejectsFile("[schedule]\nendDate = 5\n", /"schedule\.endDate" must be a date/);
+    await rejectsFile('[schedule]\nend = "25:00"\n', /Invalid time/);
+  });
+
+  it("reports TOML syntax errors on one line with a position", async () => {
+    await rejectsFile("a = = 1\n", /:1:\d+: Invalid TOML document/);
+  });
+
+  it("accepts unquoted TOML date-times", async () => {
+    writeFileSync(join(dir, ".herodotus.toml"), "[schedule]\nendDate = 2024-06-01T12:00:00Z\n");
+    const config = await parseCli(["-i", "A:a@example.com", "-b", "main", dir]);
+    assert.deepEqual(config?.schedule.anchor, {
+      type: "end",
+      date: new Date("2024-06-01T12:00:00Z"),
+    });
+  });
+});
+
 describe("library functions do not exit the process", () => {
   it("parseCli returns null for --help instead of exiting", async () => {
     assert.equal(await parseCli(["--help"]), null);
@@ -114,6 +182,27 @@ describe("library functions do not exit the process", () => {
     try {
       writeFileSync(join(dir, ".herodotus.toml"), "");
       await assert.rejects(runInit(dir), /already exists/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("runInit", () => {
+  it("escapes quotes and backslashes in the git identity", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "herodotus-init-"));
+    const name = String.raw`Ada "Countess" \ Lovelace`;
+    try {
+      for (const args of [
+        ["init", "-q"],
+        ["config", "user.name", name],
+        ["config", "user.email", "ada@example.com"],
+      ]) {
+        assert.equal(spawnSync("git", args, { cwd: dir }).status, 0);
+      }
+      await runInit(dir);
+      const toml = parseToml(readFileSync(join(dir, ".herodotus.toml"), "utf8"));
+      assert.deepEqual({ ...(toml.identity as object[])[0] }, { name, email: "ada@example.com" });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
