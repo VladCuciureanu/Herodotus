@@ -192,7 +192,7 @@ function parseConfigFile(toml: Table): FileConfig {
   return result;
 }
 
-export async function loadConfigAsync(
+export async function loadConfig(
   configPath: string | undefined,
   repoPath: string,
 ): Promise<FileConfig> {

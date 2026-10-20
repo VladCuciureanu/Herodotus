@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { buildConfig, type ConfigOverrides, loadConfigAsync, parseSchedule } from "./config.ts";
+import { buildConfig, type ConfigOverrides, loadConfig, parseSchedule } from "./config.ts";
 import type { HerodotusConfig, Identity } from "./types.ts";
 
 /** A command-line mistake that parseArgs itself does not catch. */
@@ -55,7 +55,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig | null> 
 
   const repoPath = repoPathFrom(positionals);
 
-  const fileConfig = await loadConfigAsync(values.config, repoPath);
+  const fileConfig = await loadConfig(values.config, repoPath);
 
   const cliArgs: ConfigOverrides = {};
 
