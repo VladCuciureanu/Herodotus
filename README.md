@@ -94,7 +94,9 @@ code 1. This includes unknown options.
 
 ### Config file
 
-CLI flags override the file field by field. As on the command line, a
+CLI flags override the file field by field. Only the keys shown below are
+allowed; unknown keys, an `[[identity]]` without a `name` or `email`, and
+values of the wrong type are errors. As on the command line, a
 `startDate`/`endDate` without `Z` or an offset is in the machine's local
 timezone, not `timezone`.
 
