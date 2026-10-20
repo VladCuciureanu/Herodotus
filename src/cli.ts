@@ -75,9 +75,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig | null> 
   return buildConfig(cliArgs, fileConfig, repoPath);
 }
 
-export function printUsage(): void {
-  console.log(
-    `herodotus — rewrite git history with plausible identities & timestamps
+export const USAGE = `herodotus — rewrite git history with plausible identities & timestamps
 
 Usage: herodotus [options] [<repo-path>]
        herodotus init [<repo-path>]
@@ -85,16 +83,18 @@ Usage: herodotus [options] [<repo-path>]
 Options:
   -i, --identity <name:email>  Identity to use (repeatable)
   -c, --config <file>          Config file (default: .herodotus.toml)
-  -b, --branch <ref>           Branch to rewrite (default: HEAD)
+  -b, --branch <ref>           Branch or other ref to rewrite (default: current branch)
   --start <HH:MM>              Workday start (default: 09:00)
   --end <HH:MM>                Workday end (default: 18:00)
-  --timezone <tz>               IANA timezone (default: system)
-  -d, --allowed-days <days>      Comma-separated days (default: Mon,Tue,Wed,Thu,Fri,Sat)
-  --start-date <date>           First commit lands on this date (build forward)
-  --end-date <date>             Last commit lands on this date (build backward, default: now)
-  --in-place                    Rewrite branch in-place (default: new branch)
-  --dry-run                     Show changes without modifying
-  --seed <number>               PRNG seed for reproducibility
-  -h, --help                    Show this help`,
-  );
+  --timezone <tz>              IANA timezone (default: system)
+  -d, --allowed-days <days>    Comma-separated days (default: Mon,Tue,Wed,Thu,Fri,Sat)
+  --start-date <date>          First commit lands on this date (build forward)
+  --end-date <date>            Last commit lands on this date (build backward, default: now)
+  --in-place                   Rewrite branch in-place (default: new branch)
+  --dry-run                    Show changes without modifying
+  --seed <number>              PRNG seed for reproducibility
+  -h, --help                   Show this help`;
+
+export function printUsage(): void {
+  console.log(USAGE);
 }

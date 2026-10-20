@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { parseCli } from "../src/cli.ts";
+import { parseCli, USAGE } from "../src/cli.ts";
 
 const mainScript = join(import.meta.dirname, "..", "src", "main.ts");
 
@@ -77,5 +77,14 @@ describe("parseCli", () => {
     for (const seed of ["12abc", "1.5", "-1", "", " 7", "1e3", "0x10", "9007199254740993"]) {
       await assert.rejects(parse(`--seed=${seed}`), /Invalid seed/, seed);
     }
+  });
+});
+
+describe("--help", () => {
+  it("aligns every option description in one column", () => {
+    const options = USAGE.split("\n").filter((line) => /^ {2}-/.test(line));
+    assert.ok(options.length > 10);
+    const columns = new Set(options.map((line) => line.search(/\S+(?: \S+)*$/)));
+    assert.equal(columns.size, 1, options.join("\n"));
   });
 });
