@@ -69,16 +69,35 @@ export function parseDays(input: string[]): number[] {
   });
 }
 
+/** Raw, unparsed schedule options as they appear in TOML or on the CLI. */
+export interface ScheduleInput {
+  start?: string;
+  end?: string;
+  timezone?: string;
+  allowedDays?: string[];
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * Parse raw schedule options. Only the fields that were provided are set on
+ * the result, so partial schedules from different sources can be merged.
+ */
+export function parseSchedule(input: ScheduleInput): Partial<ScheduleConfig> {
+  const schedule: Partial<ScheduleConfig> = {};
+  if (input.start) schedule.start = parseTime(input.start);
+  if (input.end) schedule.end = parseTime(input.end);
+  if (input.timezone) schedule.timezone = input.timezone;
+  if (input.allowedDays) schedule.allowedDays = parseDays(input.allowedDays);
+  if (input.startDate || input.endDate) {
+    schedule.anchor = parseAnchor(input.startDate, input.endDate);
+  }
+  return schedule;
+}
+
 interface TomlConfig {
   identity?: Array<{ name: string; email: string }>;
-  schedule?: {
-    start?: string;
-    end?: string;
-    timezone?: string;
-    allowedDays?: string[];
-    startDate?: string;
-    endDate?: string;
-  };
+  schedule?: ScheduleInput;
 }
 
 export async function loadConfigAsync(
@@ -102,14 +121,8 @@ export async function loadConfigAsync(
 
   if (toml.schedule) {
     result.schedule = {
-      start: toml.schedule.start ? parseTime(toml.schedule.start) : 9 * 60,
-      end: toml.schedule.end ? parseTime(toml.schedule.end) : 18 * 60,
-      timezone: toml.schedule.timezone ??
-        Intl.DateTimeFormat().resolvedOptions().timeZone,
-      allowedDays: toml.schedule.allowedDays
-        ? parseDays(toml.schedule.allowedDays)
-        : DEFAULT_ALLOWED_DAYS,
-      anchor: parseAnchor(toml.schedule.startDate, toml.schedule.endDate),
+      ...buildDefaultSchedule(),
+      ...parseSchedule(toml.schedule),
     };
   }
 

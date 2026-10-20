@@ -4,11 +4,9 @@ import process from "node:process";
 import type { HerodotusConfig, Identity } from "./types.ts";
 import {
   buildConfig,
-  DEFAULT_ALLOWED_DAYS,
+  buildDefaultSchedule,
   loadConfigAsync,
-  parseAnchor,
-  parseDays,
-  parseTime,
+  parseSchedule,
 } from "./config.ts";
 
 function parseIdentity(s: string): Identity {
@@ -79,14 +77,15 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
     values["start-date"] || values["end-date"]
   ) {
     cliArgs.schedule = {
-      start: values.start ? parseTime(values.start) : 9 * 60,
-      end: values.end ? parseTime(values.end) : 18 * 60,
-      timezone: values.timezone ??
-        Intl.DateTimeFormat().resolvedOptions().timeZone,
-      allowedDays: values["allowed-days"]
-        ? parseDays(values["allowed-days"].split(","))
-        : DEFAULT_ALLOWED_DAYS,
-      anchor: parseAnchor(values["start-date"], values["end-date"]),
+      ...buildDefaultSchedule(),
+      ...parseSchedule({
+        start: values.start,
+        end: values.end,
+        timezone: values.timezone,
+        allowedDays: values["allowed-days"]?.split(","),
+        startDate: values["start-date"],
+        endDate: values["end-date"],
+      }),
     };
   }
 
