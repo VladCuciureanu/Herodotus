@@ -1,30 +1,68 @@
 /**
- * Patterns matching known AI co-author identities.
- * Matched case-insensitively against Co-Authored-By trailer values.
+ * AI co-authors are recognised by identity rather than by a word anywhere in
+ * the trailer, so humans who happen to be called Claude, Cursor or Gemini keep
+ * their credit.
  */
-const AI_PATTERNS: RegExp[] = [
-  /\bclaude\b/i,
-  /\bcopilot\b/i,
-  /\bchatgpt\b/i,
-  /\bopenai\b/i,
-  /\bcursor\b/i,
-  /\bgithub\s*copilot\b/i,
-  /\banthropic\b/i,
-  /\bgemini\b/i,
-  /\bcodeium\b/i,
-  /\btabnine\b/i,
-  /\bamazon\s*q\b/i,
-  /\bcodewhisperer\b/i,
-  /noreply@anthropic\.com/i,
-  /noreply@github\.com/i,
-];
+
+/** Email domains that only AI assistants co-author from. */
+const AI_EMAIL_DOMAINS = new Set([
+  "anthropic.com",
+  "openai.com",
+  "cursor.com",
+  "cursor.sh",
+  "codeium.com",
+  "windsurf.com",
+  "tabnine.com",
+]);
+
+/** Exact email addresses used by AI assistants. */
+const AI_EMAILS = new Set([
+  "noreply@github.com", // GitHub Copilot
+]);
+
+/**
+ * GitHub noreply local parts ("<id>+<login>") of AI bot accounts. Human
+ * noreply addresses ("<id>+alice@users.noreply.github.com") don't match.
+ */
+const AI_GITHUB_LOGIN = /^(\d+\+)?(copilot|[\w.-]+\[bot\])$/i;
+
+/** Full display names that are AI products rather than people. */
+const AI_NAMES = new Set([
+  "claude code",
+  "copilot",
+  "github copilot",
+  "chatgpt",
+  "codex",
+  "openai codex",
+  "cursor agent",
+  "gemini code assist",
+  "codeium",
+  "windsurf",
+  "tabnine",
+  "amazon q",
+  "amazon q developer",
+  "codewhisperer",
+  "amazon codewhisperer",
+]);
 
 function isAiCoAuthor(value: string): boolean {
-  return AI_PATTERNS.some((p) => p.test(value));
+  const match = value.trim().match(/^(.*?)\s*<([^>]*)>\s*$/);
+  const name = (match ? match[1] : value).trim().toLowerCase();
+  const email = (match ? match[2] : "").trim().toLowerCase();
+
+  if (AI_NAMES.has(name) || name.endsWith("[bot]")) return true;
+  if (!email) return false;
+  if (AI_EMAILS.has(email)) return true;
+
+  const at = email.lastIndexOf("@");
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  if (AI_EMAIL_DOMAINS.has(domain)) return true;
+  return domain === "users.noreply.github.com" && AI_GITHUB_LOGIN.test(local);
 }
 
 /**
- * Remove Co-Authored-By lines that match known AI patterns.
+ * Remove Co-Authored-By lines that match known AI identities.
  * Preserves human co-author trailers.
  */
 export function stripAiCoAuthors(message: string): string {
