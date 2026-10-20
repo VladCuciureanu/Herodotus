@@ -105,6 +105,10 @@ describe("parseCli", () => {
     await assert.rejects(parse("extra"), /Unexpected argument/);
   });
 
+  it("fails when the file given with -c does not exist", async () => {
+    await assert.rejects(parse("-c", "missing.toml"), /Config file not found: .*missing\.toml/);
+  });
+
   it("accepts a non-negative integer seed", async () => {
     assert.equal((await parse("--seed", "0"))?.seed, 0);
     assert.equal((await parse("--seed", "42"))?.seed, 42);

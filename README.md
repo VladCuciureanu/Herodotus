@@ -69,7 +69,7 @@ prefilled with your git identity and refuses to overwrite an existing one.
 | Option                        | Default                         | Description                                         |
 | ----------------------------- | ------------------------------- | --------------------------------------------------- |
 | `-i, --identity <name:email>` | `git config user.name`/`.email` | Identity to use; repeat for several                 |
-| `-c, --config <file>`         | `.herodotus.toml`               | Config file, relative to `<repo-path>`              |
+| `-c, --config <file>`         | `.herodotus.toml`               | Config file, relative to `<repo-path>`; must exist  |
 | `-b, --branch <ref>`          | current branch                  | Branch or other ref to rewrite                      |
 | `--start <HH:MM>`             | `09:00`                         | Workday start                                       |
 | `--end <HH:MM>`               | `18:00`                         | Workday end                                         |

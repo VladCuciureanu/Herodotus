@@ -108,7 +108,11 @@ export async function loadConfigAsync(
   repoPath: string,
 ): Promise<ConfigOverrides> {
   const filePath = resolve(repoPath, configPath ?? ".herodotus.toml");
-  if (!existsSync(filePath)) return {};
+  if (!existsSync(filePath)) {
+    // Only the default file is optional; a file named with -c must exist.
+    if (configPath !== undefined) throw new Error(`Config file not found: ${filePath}`);
+    return {};
+  }
 
   const content = await readFile(filePath, "utf8");
   const toml = parseToml(content) as unknown as TomlConfig;
