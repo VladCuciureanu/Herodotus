@@ -86,6 +86,11 @@ Herodotus pipes your branch through `git fast-export`, transforms the stream in
 memory, and writes it back with `git fast-import`. No shell-per-commit overhead,
 no Python dependency.
 
+File contents are copied byte for byte. Commit messages recorded in another
+encoding (an `encoding` header, e.g. from `i18n.commitEncoding=ISO-8859-1`) are
+converted to UTF-8 via `fast-export --reencode=yes`, so rewritten commits carry
+UTF-8 messages and no encoding header.
+
 **Timestamps** are redistributed to preserve relative commit density while
 snapping everything into your configured work window. A seeded PRNG adds subtle
 jitter so the result doesn't look mechanical.

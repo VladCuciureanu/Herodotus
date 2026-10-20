@@ -212,6 +212,53 @@ describe("rewriter", () => {
     assert.equal(second.backupRef, extraRef);
   });
 
+  it("re-encodes non-UTF-8 commit messages and keeps blobs byte-exact", async (t) => {
+    // Latin-1 bytes in both the message and a file: only the message may change.
+    const latin1 = Buffer.from([0x43, 0x61, 0x66, 0xe9, 0x20, 0xff, 0x0a]); // "Café ÿ\n"
+    writeFileSync(join(repoDir, "latin1.txt"), latin1);
+    writeFileSync(join(repoDir, "blob.bin"), BINARY);
+    git(["add", "latin1.txt", "blob.bin"], repoDir);
+    const msgFile = join(repoDir, "..", `${repoDir.split(/[\\/]/).pop()}.msg`);
+    writeFileSync(msgFile, Buffer.from("Caf\xe9 latin\n", "latin1"));
+    try {
+      git([
+        "-c",
+        "i18n.commitEncoding=ISO-8859-1",
+        "commit",
+        "-F",
+        msgFile,
+        "--date",
+        "2024-01-09T03:00:00+0000",
+      ], repoDir);
+    } finally {
+      rmSync(msgFile, { force: true });
+    }
+    const raw = spawnSync("git", ["cat-file", "commit", "main"], { cwd: repoDir });
+    if (!/^encoding ISO-8859-1$/m.test(Buffer.from(raw.stdout).toString("latin1"))) {
+      t.skip("local git did not record an ISO-8859-1 encoding header");
+      return;
+    }
+
+    await rewrite(makeConfig());
+
+    const rewritten = Buffer.from(
+      spawnSync("git", ["cat-file", "commit", "herodotus/main"], { cwd: repoDir })
+        .stdout,
+    );
+    assert.ok(!rewritten.includes("encoding "), rewritten.toString("latin1"));
+    assert.ok(rewritten.includes(Buffer.from("\n\nCafé latin", "utf8")));
+    assert.equal(
+      git(["rev-parse", "herodotus/main^{tree}"], repoDir),
+      git(["rev-parse", "main^{tree}"], repoDir),
+    );
+    for (const [path, bytes] of [["latin1.txt", latin1], ["blob.bin", BINARY]] as const) {
+      const blob = spawnSync("git", ["cat-file", "blob", `herodotus/main:${path}`], {
+        cwd: repoDir,
+      });
+      assert.ok(Buffer.from(blob.stdout).equals(bytes), path);
+    }
+  });
+
   it("never overwrites a non-branch source ref in default mode", async () => {
     const originalHead = git(["rev-parse", "main"], repoDir);
     git(["update-ref", "refs/remotes/origin/main", originalHead], repoDir);

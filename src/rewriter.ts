@@ -321,8 +321,14 @@ export interface RewriteResult {
 export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
   const { repoPath, branch, schedule, seed } = config;
 
-  // Export (keep as raw bytes)
-  const fullExportProc = spawnSync("git", ["fast-export", branch], {
+  // Export (keep as raw bytes). --reencode=yes converts commit messages with a
+  // non-UTF-8 "encoding" header to UTF-8 (fast-export aborts on them by
+  // default); blob contents are never re-encoded.
+  const fullExportProc = spawnSync("git", [
+    "fast-export",
+    "--reencode=yes",
+    branch,
+  ], {
     cwd: repoPath,
     maxBuffer: Infinity,
   });
