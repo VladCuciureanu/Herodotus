@@ -18,7 +18,7 @@ well-adjusted developer with healthy work habits.
 
 ## Quick start
 
-Requires Node.js 24+ and git.
+Requires Node.js 26+ and git.
 
 ```bash
 npm install
