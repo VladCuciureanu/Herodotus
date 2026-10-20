@@ -21,7 +21,7 @@ export function formatTime(minutes: number): string {
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
-const DAY_MAP: Record<string, number> = {
+export const DAY_MAP: Record<string, number> = {
   sun: 0,
   mon: 1,
   tue: 2,

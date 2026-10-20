@@ -1,9 +1,31 @@
+import { DAY_MAP } from "./config.ts";
 import { gaussianRandom, seededRandom } from "./random.ts";
 import type { ScheduleConfig } from "./types.ts";
 
 const MIN_GAP_MS = 2 * 60 * 1000; // 2 minutes
 const MAX_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours
 const BASE_MS_PER_CHANGE = 3 * 60 * 1000; // 3 minutes per file change
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * Format `date` in `tz` into weekday, hour and minute parts. Formatters are
+ * cached per timezone because building one is far slower than using it.
+ */
+function partsInTz(date: Date, tz: string): Intl.DateTimeFormatPart[] {
+  let formatter = formatters.get(tz);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      weekday: "short",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: false,
+    });
+    formatters.set(tz, formatter);
+  }
+  return formatter.formatToParts(date);
+}
 
 /**
  * Return the value of one part from Intl.DateTimeFormat#formatToParts.
@@ -18,13 +40,7 @@ function getPart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPart
  * Given a Date, return the local time-of-day in minutes within the given timezone.
  */
 function getMinutesInTz(date: Date, tz: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hour: "numeric",
-    minute: "numeric",
-    hour12: false,
-  }).formatToParts(date);
-
+  const parts = partsInTz(date, tz);
   const hour = parseInt(getPart(parts, "hour"), 10);
   const minute = parseInt(getPart(parts, "minute"), 10);
   return hour * 60 + minute;
@@ -34,22 +50,7 @@ function getMinutesInTz(date: Date, tz: string): number {
  * Get the day of week (0=Sun, 6=Sat) in the given timezone.
  */
 function getDayOfWeekInTz(date: Date, tz: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    weekday: "short",
-  }).formatToParts(date);
-
-  const day = getPart(parts, "weekday");
-  const map: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
-  return map[day];
+  return DAY_MAP[getPart(partsInTz(date, tz), "weekday").toLowerCase()];
 }
 
 /**
