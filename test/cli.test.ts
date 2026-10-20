@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { parseCli } from "../src/cli.ts";
 
 const mainScript = join(import.meta.dirname, "..", "src", "main.ts");
 
@@ -50,5 +51,31 @@ describe("CLI errors", () => {
       herodotus(["-b", "origin/nope", repoDir]),
       /^herodotus: ref "origin\/nope" does not exist/,
     );
+  });
+});
+
+describe("parseCli", () => {
+  let repoDir: string;
+
+  beforeEach(() => {
+    repoDir = mkdtempSync(join(tmpdir(), "herodotus-parse-"));
+  });
+
+  afterEach(() => {
+    rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  const parse = (...args: string[]) =>
+    parseCli(["-i", "A:a@example.com", "-b", "main", ...args, repoDir]);
+
+  it("accepts a non-negative integer seed", async () => {
+    assert.equal((await parse("--seed", "0"))?.seed, 0);
+    assert.equal((await parse("--seed", "42"))?.seed, 42);
+  });
+
+  it("rejects seeds that are not plain non-negative integers", async () => {
+    for (const seed of ["12abc", "1.5", "-1", "", " 7", "1e3", "0x10", "9007199254740993"]) {
+      await assert.rejects(parse(`--seed=${seed}`), /Invalid seed/, seed);
+    }
   });
 });

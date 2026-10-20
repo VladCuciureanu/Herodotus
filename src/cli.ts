@@ -55,9 +55,9 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig | null> 
   if (values.branch) cliArgs.branch = values.branch;
   if (values["in-place"]) cliArgs.inPlace = true;
   if (values["dry-run"]) cliArgs.dryRun = true;
-  if (values.seed) {
-    const seed = parseInt(values.seed, 10);
-    if (!Number.isFinite(seed) || seed < 0) {
+  if (values.seed !== undefined) {
+    const seed = Number(values.seed);
+    if (!/^\d+$/.test(values.seed) || !Number.isSafeInteger(seed)) {
       throw new Error(`Invalid seed: "${values.seed}". Must be a non-negative integer`);
     }
     cliArgs.seed = seed;
