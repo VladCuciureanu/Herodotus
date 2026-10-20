@@ -142,20 +142,25 @@ function snapToWorkStart(date: Date, schedule: ScheduleConfig): Date {
 }
 
 /**
- * Build a timeline forwards: place first commit, then advance by each gap.
+ * Build a timeline forwards: place the first commit, then place each later
+ * commit at its original offset from the first one, but never closer to its
+ * predecessor than the session gap.
  */
 function buildTimelineForwards(
   startEpoch: number,
   gaps: number[],
+  offsets: number[],
   schedule: ScheduleConfig,
   rng: () => number,
 ): number[] {
   const result: number[] = [];
   let current = advanceToWorkSlot(new Date(startEpoch * 1000), schedule);
-  result.push(Math.floor(current.getTime() / 1000));
+  const base = current.getTime();
+  result.push(Math.floor(base / 1000));
 
-  for (const gap of gaps) {
-    let next = new Date(current.getTime() + gap);
+  for (let i = 0; i < gaps.length; i++) {
+    const target = base + offsets[i + 1];
+    let next = new Date(Math.max(current.getTime() + gaps[i], target));
     if (!isInWorkWindow(next, schedule)) {
       next = advanceToWorkSlot(next, schedule);
       const offsetMs = Math.floor(rng() * 30 * 60 * 1000);
@@ -172,23 +177,28 @@ function buildTimelineForwards(
 }
 
 /**
- * Build a timeline backwards from now: place last commit on the most recent
- * valid slot, then walk backwards placing each earlier commit on a valid slot.
+ * Build a timeline backwards from the anchor: place the last commit on the
+ * most recent valid slot, then walk backwards placing each earlier commit at
+ * its original offset from the last one (or at least the session gap earlier).
  */
 function buildTimelineBackwards(
   gaps: number[],
+  offsets: number[],
   schedule: ScheduleConfig,
   rng: () => number,
 ): number[] {
-  const result: number[] = new Array(gaps.length + 1);
+  const last = gaps.length;
+  const result: number[] = new Array(last + 1);
 
   // Place last commit at the latest valid slot at or before the anchor date
   let current = retreatToWorkSlot(schedule.anchor.date, schedule);
-  result[gaps.length] = Math.floor(current.getTime() / 1000);
+  const base = current.getTime();
+  result[last] = Math.floor(base / 1000);
 
   // Walk backwards through gaps
-  for (let i = gaps.length - 1; i >= 0; i--) {
-    let prev = new Date(current.getTime() - gaps[i]);
+  for (let i = last - 1; i >= 0; i--) {
+    const target = base - (offsets[last] - offsets[i]);
+    let prev = new Date(Math.min(current.getTime() - gaps[i], target));
     if (!isInWorkWindow(prev, schedule)) {
       prev = retreatToWorkSlot(prev, schedule);
       // Subtract a small random offset to avoid always landing at slot boundary
@@ -208,6 +218,11 @@ function buildTimelineBackwards(
 /**
  * Redistribute an array of unix timestamps (seconds) into realistic work hours.
  * Returns new timestamps in the same order.
+ *
+ * The original spacing between commits is preserved: commits that were days
+ * apart stay days apart, while commits made in one sitting stay close
+ * together. Any timestamp that falls outside the work window is snapped to
+ * the nearest valid slot in the direction of travel.
  */
 export function redistributeTimestamps(
   timestamps: number[],
@@ -225,23 +240,35 @@ export function redistributeTimestamps(
 
   const rng = seededRandom(seed);
 
-  // Compute gaps based on change counts of the next commit
-  const clampedGaps: number[] = [];
+  // offsets[i]: original time since the first commit (ms), made monotonic so
+  // out-of-order author dates (e.g. after a rebase) don't move commits back.
+  // gaps[i-1]: minimum spacing between commit i-1 and i within a session.
+  const offsets: number[] = [0];
+  const gaps: number[] = [];
   for (let i = 1; i < timestamps.length; i++) {
-    const changes = changeCounts ? Math.max(1, changeCounts[i]) : 1;
-    const baseGap = changes * BASE_MS_PER_CHANGE;
+    const originalGap = Math.max(0, timestamps[i] - timestamps[i - 1]) * 1000;
+    offsets.push(offsets[i - 1] + originalGap);
+
+    let baseGap: number;
+    if (originalGap > 0 && originalGap <= MAX_GAP_MS) {
+      baseGap = originalGap;
+    } else {
+      const changes = changeCounts ? Math.max(1, changeCounts[i]) : 1;
+      baseGap = changes * BASE_MS_PER_CHANGE;
+    }
     const clamped = Math.max(MIN_GAP_MS, Math.min(MAX_GAP_MS, baseGap));
     const jitter = gaussianRandom(rng, 0, clamped * 0.15);
-    clampedGaps.push(Math.max(MIN_GAP_MS, clamped + jitter));
+    gaps.push(Math.max(MIN_GAP_MS, clamped + jitter));
   }
 
   if (schedule.anchor.type === "end") {
-    return buildTimelineBackwards(clampedGaps, schedule, rng);
+    return buildTimelineBackwards(gaps, offsets, schedule, rng);
   }
 
   return buildTimelineForwards(
     Math.floor(schedule.anchor.date.getTime() / 1000),
-    clampedGaps,
+    gaps,
+    offsets,
     schedule,
     rng,
   );

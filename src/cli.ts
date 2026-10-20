@@ -3,11 +3,9 @@ import { resolve } from "node:path";
 import type { HerodotusConfig, Identity } from "./types.ts";
 import {
   buildConfig,
-  DEFAULT_ALLOWED_DAYS,
+  type ConfigOverrides,
   loadConfigAsync,
-  parseAnchor,
-  parseDays,
-  parseTime,
+  parseSchedule,
 } from "./config.ts";
 
 function parseIdentity(s: string): Identity {
@@ -23,7 +21,13 @@ function parseIdentity(s: string): Identity {
   };
 }
 
-export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
+/**
+ * Parse CLI arguments into a config. Returns null when --help was requested;
+ * the caller decides how to show usage and exit.
+ */
+export async function parseCli(
+  argv: string[],
+): Promise<HerodotusConfig | null> {
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
@@ -45,16 +49,13 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
     strict: true,
   });
 
-  if (values.help) {
-    printUsage();
-    Deno.exit(0);
-  }
+  if (values.help) return null;
 
   const repoPath = resolve(positionals[0] ?? ".");
 
   const fileConfig = await loadConfigAsync(values.config, repoPath);
 
-  const cliArgs: Partial<HerodotusConfig> = {};
+  const cliArgs: ConfigOverrides = {};
 
   if (values.identity && values.identity.length > 0) {
     cliArgs.identities = values.identity.map(parseIdentity);
@@ -73,26 +74,19 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
     cliArgs.seed = seed;
   }
 
-  if (
-    values.start || values.end || values.timezone || values["allowed-days"] ||
-    values["start-date"] || values["end-date"]
-  ) {
-    cliArgs.schedule = {
-      start: values.start ? parseTime(values.start) : 9 * 60,
-      end: values.end ? parseTime(values.end) : 18 * 60,
-      timezone: values.timezone ??
-        Intl.DateTimeFormat().resolvedOptions().timeZone,
-      allowedDays: values["allowed-days"]
-        ? parseDays(values["allowed-days"].split(","))
-        : DEFAULT_ALLOWED_DAYS,
-      anchor: parseAnchor(values["start-date"], values["end-date"]),
-    };
-  }
+  cliArgs.schedule = parseSchedule({
+    start: values.start,
+    end: values.end,
+    timezone: values.timezone,
+    allowedDays: values["allowed-days"]?.split(","),
+    startDate: values["start-date"],
+    endDate: values["end-date"],
+  });
 
   return buildConfig(cliArgs, fileConfig, repoPath);
 }
 
-function printUsage(): void {
+export function printUsage(): void {
   console.log(
     `herodotus — rewrite git history with plausible identities & timestamps
 

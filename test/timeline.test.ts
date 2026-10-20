@@ -1,5 +1,5 @@
-import { describe, it } from "jsr:@std/testing/bdd";
-import { expect } from "jsr:@std/expect";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { redistributeTimestamps } from "../src/timeline.ts";
 import type { ScheduleConfig } from "../src/types.ts";
 
@@ -13,7 +13,7 @@ const schedule: ScheduleConfig = {
 
 describe("redistributeTimestamps", () => {
   it("empty array returns empty", () => {
-    expect(redistributeTimestamps([], schedule, 42)).toEqual([]);
+    assert.deepEqual(redistributeTimestamps([], schedule, 42), []);
   });
 
   it("single timestamp is moved to work hours", () => {
@@ -22,8 +22,8 @@ describe("redistributeTimestamps", () => {
 
     const resultDate = new Date(result[0] * 1000);
     const hours = resultDate.getUTCHours();
-    expect(hours).toBeGreaterThanOrEqual(9);
-    expect(hours).toBeLessThan(18);
+    assert.ok(hours >= 9);
+    assert.ok(hours < 18);
   });
 
   it("preserves commit order", () => {
@@ -32,7 +32,7 @@ describe("redistributeTimestamps", () => {
     const result = redistributeTimestamps(timestamps, schedule, 42);
 
     for (let i = 1; i < result.length; i++) {
-      expect(result[i]).toBeGreaterThan(result[i - 1]);
+      assert.ok(result[i] > result[i - 1]);
     }
   });
 
@@ -45,10 +45,10 @@ describe("redistributeTimestamps", () => {
       const d = new Date(ts * 1000);
       const hours = d.getUTCHours();
       const day = d.getUTCDay();
-      expect(hours).toBeGreaterThanOrEqual(9);
-      expect(hours).toBeLessThan(18);
-      expect(day).not.toBe(0);
-      expect(day).not.toBe(6);
+      assert.ok(hours >= 9);
+      assert.ok(hours < 18);
+      assert.notEqual(day, 0);
+      assert.notEqual(day, 6);
     }
   });
 
@@ -57,7 +57,7 @@ describe("redistributeTimestamps", () => {
     const timestamps = [base, base + 600, base + 7200];
     const r1 = redistributeTimestamps(timestamps, schedule, 123);
     const r2 = redistributeTimestamps(timestamps, schedule, 123);
-    expect(r1).toEqual(r2);
+    assert.deepEqual(r1, r2);
   });
 
   it("different seeds produce different results", () => {
@@ -65,6 +65,82 @@ describe("redistributeTimestamps", () => {
     const timestamps = [base, base + 600, base + 7200];
     const r1 = redistributeTimestamps(timestamps, schedule, 123);
     const r2 = redistributeTimestamps(timestamps, schedule, 456);
-    expect(r1.some((v, i) => v !== r2[i])).toBe(true);
+    assert.equal(r1.some((v, i) => v !== r2[i]), true);
+  });
+});
+
+describe("redistributeTimestamps preserves commit density", () => {
+  const DAY = 24 * 3600;
+  // One commit a day at 03:00 UTC for ~3 months
+  const base = Math.floor(new Date("2024-01-01T03:00:00Z").getTime() / 1000);
+  const timestamps = Array.from({ length: 90 }, (_, i) => base + i * DAY);
+
+  function distinctDays(result: number[]): number {
+    return new Set(
+      result.map((ts) => new Date(ts * 1000).toISOString().slice(0, 10)),
+    ).size;
+  }
+
+  it("keeps months of history spread across days (forward)", () => {
+    const result = redistributeTimestamps(timestamps, schedule, 42);
+    const spanDays = (result[result.length - 1] - result[0]) / DAY;
+    assert.ok(spanDays >= 80, `span was ${spanDays.toFixed(1)} days`);
+    assert.ok(distinctDays(result) >= 60, `${distinctDays(result)} days`);
+    for (let i = 1; i < result.length; i++) {
+      assert.ok(result[i] > result[i - 1]);
+    }
+  });
+
+  it("keeps months of history spread across days (backward)", () => {
+    const backward: ScheduleConfig = {
+      ...schedule,
+      anchor: { type: "end", date: new Date("2024-06-28T17:00:00Z") },
+    };
+    const result = redistributeTimestamps(timestamps, backward, 42);
+    const spanDays = (result[result.length - 1] - result[0]) / DAY;
+    assert.ok(spanDays >= 80, `span was ${spanDays.toFixed(1)} days`);
+    assert.ok(distinctDays(result) >= 60, `${distinctDays(result)} days`);
+    assert.ok(result[result.length - 1] <= backward.anchor.date.getTime() / 1000);
+    for (let i = 1; i < result.length; i++) {
+      assert.ok(result[i] > result[i - 1]);
+    }
+  });
+
+  it("keeps a burst of commits within the same session", () => {
+    // Five commits ten minutes apart in the middle of the night
+    const night = Math.floor(new Date("2024-01-09T02:00:00Z").getTime() / 1000);
+    const burst = Array.from({ length: 5 }, (_, i) => night + i * 600);
+    const result = redistributeTimestamps(burst, schedule, 42);
+    assert.ok(result[4] - result[0] < 3 * 3600);
+  });
+});
+
+describe("redistributeTimestamps in a non-UTC timezone", () => {
+  it("places commits within local work hours on local allowed days", () => {
+    const tz = "America/New_York";
+    const local: ScheduleConfig = {
+      ...schedule,
+      timezone: tz,
+      anchor: { type: "start", date: new Date("2024-03-08T14:00:00Z") },
+    };
+    // Spans the US DST change on 2024-03-10
+    const base = Math.floor(new Date("2024-03-08T02:00:00Z").getTime() / 1000);
+    const timestamps = Array.from({ length: 40 }, (_, i) => base + i * 3 * 3600);
+    const result = redistributeTimestamps(timestamps, local, 42);
+
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      weekday: "short",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: false,
+    });
+    for (const ts of result) {
+      const parts = fmt.formatToParts(new Date(ts * 1000));
+      const get = (t: string) => parts.find((p) => p.type === t)!.value;
+      const mins = parseInt(get("hour")) * 60 + parseInt(get("minute"));
+      assert.ok(mins >= 9 * 60 && mins < 18 * 60, `local ${get("hour")}:${get("minute")}`);
+      assert.ok(!["Sat", "Sun"].includes(get("weekday")), get("weekday"));
+    }
   });
 });

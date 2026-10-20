@@ -1,5 +1,6 @@
 import { parse as parseToml } from "smol-toml";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { HerodotusConfig, ScheduleConfig } from "./types.ts";
 import { getCurrentBranch, getDefaultIdentity } from "./utils.ts";
@@ -68,29 +69,56 @@ export function parseDays(input: string[]): number[] {
   });
 }
 
+/** Raw, unparsed schedule options as they appear in TOML or on the CLI. */
+export interface ScheduleInput {
+  start?: string;
+  end?: string;
+  timezone?: string;
+  allowedDays?: string[];
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * Parse raw schedule options. Only the fields that were provided are set on
+ * the result, so partial schedules from different sources can be merged.
+ */
+export function parseSchedule(input: ScheduleInput): Partial<ScheduleConfig> {
+  const schedule: Partial<ScheduleConfig> = {};
+  if (input.start) schedule.start = parseTime(input.start);
+  if (input.end) schedule.end = parseTime(input.end);
+  if (input.timezone) schedule.timezone = input.timezone;
+  if (input.allowedDays) schedule.allowedDays = parseDays(input.allowedDays);
+  if (input.startDate || input.endDate) {
+    schedule.anchor = parseAnchor(input.startDate, input.endDate);
+  }
+  return schedule;
+}
+
+/**
+ * Config from a single source (file or CLI). The schedule may be partial so
+ * that sources can be merged field by field.
+ */
+export type ConfigOverrides = Omit<Partial<HerodotusConfig>, "schedule"> & {
+  schedule?: Partial<ScheduleConfig>;
+};
+
 interface TomlConfig {
   identity?: Array<{ name: string; email: string }>;
-  schedule?: {
-    start?: string;
-    end?: string;
-    timezone?: string;
-    allowedDays?: string[];
-    startDate?: string;
-    endDate?: string;
-  };
+  schedule?: ScheduleInput;
 }
 
 export async function loadConfigAsync(
   configPath: string | undefined,
   repoPath: string,
-): Promise<Partial<HerodotusConfig>> {
+): Promise<ConfigOverrides> {
   const filePath = resolve(repoPath, configPath ?? ".herodotus.toml");
   if (!existsSync(filePath)) return {};
 
-  const content = await Deno.readTextFile(filePath);
+  const content = await readFile(filePath, "utf8");
   const toml = parseToml(content) as unknown as TomlConfig;
 
-  const result: Partial<HerodotusConfig> = {};
+  const result: ConfigOverrides = {};
 
   if (toml.identity && toml.identity.length > 0) {
     result.identities = toml.identity.map((i) => ({
@@ -100,16 +128,7 @@ export async function loadConfigAsync(
   }
 
   if (toml.schedule) {
-    result.schedule = {
-      start: toml.schedule.start ? parseTime(toml.schedule.start) : 9 * 60,
-      end: toml.schedule.end ? parseTime(toml.schedule.end) : 18 * 60,
-      timezone: toml.schedule.timezone ??
-        Intl.DateTimeFormat().resolvedOptions().timeZone,
-      allowedDays: toml.schedule.allowedDays
-        ? parseDays(toml.schedule.allowedDays)
-        : DEFAULT_ALLOWED_DAYS,
-      anchor: parseAnchor(toml.schedule.startDate, toml.schedule.endDate),
-    };
+    result.schedule = parseSchedule(toml.schedule);
   }
 
   return result;
@@ -126,13 +145,15 @@ export function buildDefaultSchedule(): ScheduleConfig {
 }
 
 export function buildConfig(
-  cliArgs: Partial<HerodotusConfig>,
-  fileConfig: Partial<HerodotusConfig>,
+  cliArgs: ConfigOverrides,
+  fileConfig: ConfigOverrides,
   repoPath: string,
 ): HerodotusConfig {
   const identities = cliArgs.identities ??
     fileConfig.identities ?? [getDefaultIdentity(repoPath)];
 
+  // Each source only carries the fields it set, so later sources override
+  // earlier ones field by field.
   const schedule: ScheduleConfig = {
     ...buildDefaultSchedule(),
     ...fileConfig.schedule,
