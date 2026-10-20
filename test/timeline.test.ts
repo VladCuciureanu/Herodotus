@@ -114,3 +114,33 @@ describe("redistributeTimestamps preserves commit density", () => {
     assert.ok(result[4] - result[0] < 3 * 3600);
   });
 });
+
+describe("redistributeTimestamps in a non-UTC timezone", () => {
+  it("places commits within local work hours on local allowed days", () => {
+    const tz = "America/New_York";
+    const local: ScheduleConfig = {
+      ...schedule,
+      timezone: tz,
+      anchor: { type: "start", date: new Date("2024-03-08T14:00:00Z") },
+    };
+    // Spans the US DST change on 2024-03-10
+    const base = Math.floor(new Date("2024-03-08T02:00:00Z").getTime() / 1000);
+    const timestamps = Array.from({ length: 40 }, (_, i) => base + i * 3 * 3600);
+    const result = redistributeTimestamps(timestamps, local, 42);
+
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      weekday: "short",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: false,
+    });
+    for (const ts of result) {
+      const parts = fmt.formatToParts(new Date(ts * 1000));
+      const get = (t: string) => parts.find((p) => p.type === t)!.value;
+      const mins = parseInt(get("hour")) * 60 + parseInt(get("minute"));
+      assert.ok(mins >= 9 * 60 && mins < 18 * 60, `local ${get("hour")}:${get("minute")}`);
+      assert.ok(!["Sat", "Sun"].includes(get("weekday")), get("weekday"));
+    }
+  });
+});
