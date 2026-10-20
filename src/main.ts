@@ -37,7 +37,8 @@ async function main() {
 
   // Refuses non-refs, ambiguous names and annotated tags in both modes.
   // Default mode writes to a new local branch and never touches the source ref.
-  const { target } = resolveRewriteTarget(config.repoPath, config.branch);
+  const refs = resolveRewriteTarget(config.repoPath, config.branch);
+  const { target } = refs;
   const targetName = target.replace(/^refs\/heads\//, "");
   if (!config.inPlace && branchExists(config.repoPath, target)) {
     throw new Error(`branch "${targetName}" already exists. Delete it first or use --in-place.`);
@@ -55,7 +56,7 @@ async function main() {
   console.log(`  Mode: ${config.inPlace ? "in-place" : `new branch ${targetName}`}`);
   console.log();
 
-  const { changes, backupRef } = await rewrite(config);
+  const { changes, backupRef } = await rewrite(config, { refs });
 
   if (config.dryRun) {
     console.log("Changes that would be applied:\n");

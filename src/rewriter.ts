@@ -4,7 +4,12 @@ import { capitalizeConventionalCommit } from "./commit-message.ts";
 import { createIdentityPicker } from "./identity.ts";
 import { redistributeTimestamps } from "./timeline.ts";
 import type { CommitInfo, HerodotusConfig, Identity } from "./types.ts";
-import { createBackupRef, defaultBackupRef, resolveRewriteTarget } from "./utils.ts";
+import {
+  createBackupRef,
+  defaultBackupRef,
+  type RewriteTarget,
+  resolveRewriteTarget,
+} from "./utils.ts";
 
 const LF = 0x0a; // '\n'
 const encoder = new TextEncoder();
@@ -292,16 +297,24 @@ export interface RewriteResult {
   backupRef?: string;
 }
 
+export interface RewriteOptions {
+  /** The already resolved refs for `config.branch`, to avoid resolving them twice. */
+  refs?: RewriteTarget;
+}
+
 /**
  * Run the full rewrite pipeline.
  */
-export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
+export async function rewrite(
+  config: HerodotusConfig,
+  options: RewriteOptions = {},
+): Promise<RewriteResult> {
   const { repoPath, branch, schedule, seed } = config;
 
   // Both modes need a real, unambiguous ref that is safe to rewrite; this
   // refuses commit hashes, detached HEAD, ambiguous names and annotated tags.
   // Default mode writes to herodotus/<name>; in-place rewrites `source` itself.
-  const { source, target } = resolveRewriteTarget(repoPath, branch);
+  const { source, target } = options.refs ?? resolveRewriteTarget(repoPath, branch);
 
   // Export (keep as raw bytes). --reencode=yes converts commit messages with a
   // non-UTF-8 "encoding" header to UTF-8 (fast-export aborts on them by
