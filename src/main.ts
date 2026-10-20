@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import process from "node:process";
 import { parseCli, parseInitCli, printUsage, UsageError } from "./cli.ts";
+import { formatTime } from "./config.ts";
 import { runInit } from "./init.ts";
 import { rewrite } from "./rewriter.ts";
 import {
@@ -46,13 +47,8 @@ async function main() {
 
   console.log(`Herodotus: rewriting ${config.branch}${config.dryRun ? " (dry run)" : ""}`);
   console.log(`  Identities: ${config.identities.map((i) => `${i.name} <${i.email}>`).join(", ")}`);
-  console.log(
-    `  Schedule: ${Math.floor(config.schedule.start / 60)}:${String(
-      config.schedule.start % 60,
-    ).padStart(2, "0")} – ${Math.floor(config.schedule.end / 60)}:${String(
-      config.schedule.end % 60,
-    ).padStart(2, "0")} ${config.schedule.timezone}`,
-  );
+  const { start, end, timezone } = config.schedule;
+  console.log(`  Schedule: ${formatTime(start)} – ${formatTime(end)} ${timezone}`);
   console.log(`  Mode: ${config.inPlace ? "in-place" : `new branch ${targetName}`}`);
   console.log();
 
