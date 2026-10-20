@@ -7,7 +7,7 @@ your chosen identity, commits inside office hours, and no AI co-author
 trailers.
 
 ```console
-$ herodotus --dry-run -i "Ada Lovelace:ada@example.com" --timezone Europe/London
+$ herodotus --dry-run -i "Ada Lovelace:ada@example.com" --timezone Europe/London \n    --end-date 2026-03-20T17:00:00Z --seed 1
 Herodotus: rewriting main (dry run)
   Identities: Ada Lovelace <ada@example.com>
   Schedule: 9:00 – 18:00 Europe/London
@@ -33,8 +33,9 @@ Changes that would be applied:
   kept: commits made in one sitting stay close, commits days apart stay days
   apart. Seeded jitter keeps it from looking mechanical.
 - `Co-Authored-By` trailers from AI assistants (Claude, Copilot, ChatGPT,
-  Codex, Cursor, Gemini, Windsurf, Tabnine, Amazon Q, `[bot]` accounts) are
-  removed. Human co-authors stay.
+  Codex, Cursor, Gemini Code Assist, Windsurf, Codeium, Tabnine, Amazon Q,
+  `[bot]` accounts) are removed when the name or email identifies the tool.
+  Human co-authors stay.
 - Conventional commit subjects get their first letter capitalised
   (`fix: typo` becomes `fix: Typo`).
 
@@ -82,13 +83,19 @@ existing one.
 | `-h, --help`                  |                                 | Show help                                           |
 
 `--start-date` and `--end-date` are mutually exclusive. Dates are anything
-JavaScript's `Date` parses, e.g. `2026-01-05T09:00:00Z`.
+JavaScript's `Date` parses, e.g. `2026-01-05T09:00:00Z`. A date-time without
+`Z` or an offset is read in the machine's local timezone, not `--timezone`.
+
+With no `-i`, no `[[identity]]` in the config and no git `user.name` and
+`user.email`, the run fails.
 
 Errors go to stderr with exit code 1.
 
 ### Config file
 
-CLI flags override the file field by field.
+CLI flags override the file field by field. As on the command line, a
+`startDate`/`endDate` without `Z` or an offset is in the machine's local
+timezone, not `timezone`.
 
 ```toml
 [[identity]]
@@ -100,8 +107,8 @@ start = "09:00"
 end = "18:00"
 timezone = "Europe/Bucharest"
 allowedDays = ["Mon", "Tue", "Wed", "Thu", "Fri"]
-# startDate = "2026-01-05T09:00:00"
-endDate = "2026-06-30T18:00:00"
+# startDate = "2026-01-05T07:00:00Z"
+endDate = "2026-06-30T15:00:00Z"
 ```
 
 ### Where the result goes
@@ -111,7 +118,9 @@ branch `herodotus/<ref>`; `-b origin/main` writes `herodotus/origin/main`. The
 run fails if that branch already exists.
 
 With `--in-place` the ref itself is rewritten, after its old value is saved to
-`refs/original/herodotus/<ref>`. An existing backup is never overwritten: the
+`refs/original/herodotus/<ref>`. This works on any ref, including
+remote-tracking ones: `--in-place -b origin/main` backs up and then rewrites
+`refs/remotes/origin/main`. An existing backup is never overwritten: the
 new one goes to `refs/original/herodotus/<ref>@<unix-ts>`, and the output names
 the ref used.
 
