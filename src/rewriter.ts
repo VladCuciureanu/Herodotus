@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { stripAiCoAuthors } from "./ai-authors.ts";
 import { capitalizeConventionalCommit } from "./commit-message.ts";
-import { createIdentityPicker } from "./identity.ts";
+import { pickIdentities } from "./identity.ts";
 import { redistributeTimestamps } from "./timeline.ts";
 import type { CommitInfo, HerodotusConfig, Identity } from "./types.ts";
 import {
@@ -343,8 +343,8 @@ export async function rewrite(
   // Redistribute timestamps
   const newTimestamps = redistributeTimestamps(originalTimestamps, schedule, seed, changeCounts);
 
-  // Create identity picker
-  const pickIdentity = createIdentityPicker(config.identities, seed);
+  // Pick an identity per commit
+  const newIdentities = pickIdentities(config.identities, seed, commits.length);
 
   // Build change log and modifications
   const changeLog: CommitInfo[] = [];
@@ -353,7 +353,7 @@ export async function rewrite(
   for (let i = 0; i < commits.length; i++) {
     const commit = commits[i];
     const origAuthor = parseAuthorLine(commit.authorLine);
-    const newIdentity = pickIdentity(i);
+    const newIdentity = newIdentities[i];
     const tzOffset = getTzOffset(newTimestamps[i], schedule.timezone);
     const newTs = `${newTimestamps[i]} ${tzOffset}`;
 
