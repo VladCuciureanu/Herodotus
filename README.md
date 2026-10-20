@@ -90,9 +90,13 @@ no Python dependency.
 snapping everything into your configured work window. A seeded PRNG adds subtle
 jitter so the result doesn't look mechanical.
 
-**Safety**: By default, Herodotus writes to a `herodotus/<branch>` branch,
-leaving your original history untouched. Use `--in-place` to rewrite directly (a
-backup ref is created automatically).
+**Safety**: By default, Herodotus writes to a new local `herodotus/<branch>`
+branch, leaving your original history untouched. This holds for any ref you pass
+with `-b`, not only local branches: `-b origin/main` writes
+`herodotus/origin/main` and leaves `refs/remotes/origin/main` alone. Revisions
+that are not refs (a commit hash, `HEAD~2`) and annotated tags are refused;
+create a branch from them first. Use `--in-place` to rewrite directly (a backup
+ref is created automatically).
 
 ## Install & test
 

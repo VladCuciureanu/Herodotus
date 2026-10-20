@@ -191,6 +191,35 @@ describe("rewriter", () => {
     assert.equal(git(["status", "--porcelain"], repoDir), "");
   });
 
+  it("never overwrites a non-branch source ref in default mode", async () => {
+    const originalHead = git(["rev-parse", "main"], repoDir);
+    git(["update-ref", "refs/remotes/origin/main", originalHead], repoDir);
+
+    await rewrite(makeConfig({ branch: "origin/main" }));
+
+    assert.equal(
+      git(["rev-parse", "refs/remotes/origin/main"], repoDir),
+      originalHead,
+    );
+    assert.equal(git(["rev-parse", "main"], repoDir), originalHead);
+    const target = "refs/heads/herodotus/origin/main";
+    assert.notEqual(git(["rev-parse", target], repoDir), originalHead);
+    assert.equal(git(["rev-list", "--count", target], repoDir), "3");
+    const authors = git(["log", "--format=%an <%ae>", target], repoDir);
+    for (const line of authors.split("\n")) {
+      assert.equal(line, "New Author <new@example.com>");
+    }
+  });
+
+  it("refuses an annotated tag in default mode", async () => {
+    git(["tag", "-a", "v1", "-m", "release"], repoDir);
+    const tagObject = git(["rev-parse", "refs/tags/v1"], repoDir);
+
+    await assert.rejects(rewrite(makeConfig({ branch: "v1" })), /annotated tag/);
+
+    assert.equal(git(["rev-parse", "refs/tags/v1"], repoDir), tagObject);
+  });
+
   it("uses local work hours and offsets of a non-UTC timezone", async () => {
     await rewrite(makeConfig({
       schedule: { ...schedule, timezone: "Asia/Kolkata" },
@@ -253,5 +282,30 @@ describe("herodotus CLI end to end", () => {
     for (const line of authors.split("\n")) {
       assert.equal(line, "Ada Lovelace <ada@example.com>");
     }
+  });
+
+  it("writes -b origin/main to herodotus/origin/main, leaving the remote ref", () => {
+    const originalHead = git(["rev-parse", "main"], repoDir);
+    git(["update-ref", "refs/remotes/origin/main", originalHead], repoDir);
+    const result = spawnSync(process.execPath, [
+      mainScript,
+      "-i",
+      "Ada Lovelace:ada@example.com",
+      "-b",
+      "origin/main",
+      "--seed",
+      "7",
+      repoDir,
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /new branch herodotus\/origin\/main/);
+    assert.equal(
+      git(["rev-parse", "refs/remotes/origin/main"], repoDir),
+      originalHead,
+    );
+    assert.equal(
+      git(["rev-parse", "refs/heads/herodotus/origin/main^{tree}"], repoDir),
+      git(["rev-parse", "main^{tree}"], repoDir),
+    );
   });
 });

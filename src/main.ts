@@ -2,7 +2,11 @@
 import { parseCli, printUsage } from "./cli.ts";
 import { runInit } from "./init.ts";
 import { rewrite } from "./rewriter.ts";
-import { branchExists, isWorkingTreeClean } from "./utils.ts";
+import {
+  branchExists,
+  isWorkingTreeClean,
+  resolveRewriteTarget,
+} from "./utils.ts";
 import { resolve } from "node:path";
 import process from "node:process";
 
@@ -34,12 +38,14 @@ async function main() {
     process.exit(1);
   }
 
-  if (
-    !config.inPlace &&
-    branchExists(config.repoPath, `herodotus/${config.branch}`)
-  ) {
+  // Default mode writes to a new local branch and never touches the source ref.
+  const target = config.inPlace
+    ? undefined
+    : resolveRewriteTarget(config.repoPath, config.branch).target;
+  const targetName = target?.replace(/^refs\/heads\//, "");
+  if (target && branchExists(config.repoPath, target)) {
     console.error(
-      `Error: branch "herodotus/${config.branch}" already exists. Delete it first or use --in-place.`,
+      `Error: branch "${targetName}" already exists. Delete it first or use --in-place.`,
     );
     process.exit(1);
   }
@@ -61,7 +67,7 @@ async function main() {
   );
   console.log(
     `  Mode: ${
-      config.inPlace ? "in-place" : `new branch herodotus/${config.branch}`
+      config.inPlace ? "in-place" : `new branch ${targetName}`
     }`,
   );
   console.log();

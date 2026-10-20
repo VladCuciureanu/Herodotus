@@ -4,6 +4,7 @@ import { stripAiCoAuthors } from "./ai-authors.ts";
 import { capitalizeConventionalCommit } from "./commit-message.ts";
 import { createIdentityPicker } from "./identity.ts";
 import { redistributeTimestamps } from "./timeline.ts";
+import { createBackupRef, resolveRewriteTarget } from "./utils.ts";
 
 const LF = 0x0A; // '\n'
 const encoder = new TextEncoder();
@@ -392,24 +393,25 @@ export async function rewrite(config: HerodotusConfig): Promise<CommitInfo[]> {
     return changeLog;
   }
 
-  // Determine target ref
-  const targetRef = config.inPlace ? branch : `herodotus/${branch}`;
-
-  // Rebuild the stream with modifications, pointing it at the target ref.
+  // Outside in-place mode, point the stream at the new local branch. fast-export
+  // names the ref by its full refname, so resolve it the same way; this renames
+  // remote-tracking refs and tags too, and never overwrites the source ref.
   // The rename is applied to parsed command lines only, so blob bytes are
   // never decoded/re-encoded (which would corrupt non-UTF-8 content).
+  let refRename: RefRename | undefined;
+  if (!config.inPlace) {
+    const { source, target } = resolveRewriteTarget(repoPath, branch);
+    refRename = { from: source, to: target };
+  }
   const modifiedStream = rebuildFastExport(
     parsedExport,
     modifications,
-    targetRef !== branch
-      ? { from: `refs/heads/${branch}`, to: `refs/heads/${targetRef}` }
-      : undefined,
+    refRename,
   );
 
   // Create backup if in-place
   if (config.inPlace && config.backup) {
-    const { createBackupRef } = await import("./utils.ts");
-    createBackupRef(repoPath, branch, config.backup as string);
+    createBackupRef(repoPath, branch, config.backup);
   }
 
   // Import using raw bytes
