@@ -1,7 +1,7 @@
-import { parse as parseToml } from "smol-toml";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { parse as parseToml } from "smol-toml";
 import type { HerodotusConfig, ScheduleConfig } from "./types.ts";
 import { getCurrentBranch, getDefaultIdentity } from "./utils.ts";
 
@@ -35,14 +35,9 @@ const DAY_MAP: Record<string, number> = {
 
 export const DEFAULT_ALLOWED_DAYS = [1, 2, 3, 4, 5, 6]; // Mon-Sat
 
-export function parseAnchor(
-  startDate?: string,
-  endDate?: string,
-): ScheduleConfig["anchor"] {
+export function parseAnchor(startDate?: string, endDate?: string): ScheduleConfig["anchor"] {
   if (startDate && endDate) {
-    throw new Error(
-      "Cannot specify both --start-date and --end-date. Choose one.",
-    );
+    throw new Error("Cannot specify both --start-date and --end-date. Choose one.");
   }
   if (startDate) {
     const d = new Date(startDate);
@@ -149,8 +144,7 @@ export function buildConfig(
   fileConfig: ConfigOverrides,
   repoPath: string,
 ): HerodotusConfig {
-  const identities = cliArgs.identities ??
-    fileConfig.identities ?? [getDefaultIdentity(repoPath)];
+  const identities = cliArgs.identities ?? fileConfig.identities ?? [getDefaultIdentity(repoPath)];
 
   // Each source only carries the fields it set, so later sources override
   // earlier ones field by field.
@@ -160,8 +154,7 @@ export function buildConfig(
     ...cliArgs.schedule,
   };
 
-  const branch = cliArgs.branch ?? fileConfig.branch ??
-    getCurrentBranch(repoPath);
+  const branch = cliArgs.branch ?? fileConfig.branch ?? getCurrentBranch(repoPath);
 
   return {
     identities,

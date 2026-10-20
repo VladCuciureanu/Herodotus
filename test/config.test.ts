@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { parseCli } from "../src/cli.ts";
 import { parseSchedule } from "../src/config.ts";
 import { runInit } from "../src/init.ts";
@@ -71,9 +71,7 @@ endDate = "2024-06-01T12:00:00Z"
     assert.equal(config.schedule.end, 16 * 60);
     assert.equal(config.schedule.timezone, "Europe/Bucharest");
     assert.deepEqual(config.schedule.allowedDays, [6, 0]);
-    assert.deepEqual(config.identities, [
-      { name: "File Author", email: "file@example.com" },
-    ]);
+    assert.deepEqual(config.identities, [{ name: "File Author", email: "file@example.com" }]);
   });
 
   it("a single CLI flag overrides only its own field", async () => {
@@ -90,13 +88,7 @@ endDate = "2024-06-01T12:00:00Z"
   });
 
   it("a CLI date anchor replaces the file anchor", async () => {
-    const config = await parseCli([
-      "-b",
-      "main",
-      "--start-date",
-      "2024-01-01T09:00:00Z",
-      dir,
-    ]);
+    const config = await parseCli(["-b", "main", "--start-date", "2024-01-01T09:00:00Z", dir]);
     assert.ok(config);
     assert.deepEqual(config.schedule.anchor, {
       type: "start",
@@ -108,9 +100,7 @@ endDate = "2024-06-01T12:00:00Z"
   it("CLI identities override file identities", async () => {
     const config = await parseCli(["-b", "main", "-i", "Cli:cli@example.com", dir]);
     assert.ok(config);
-    assert.deepEqual(config.identities, [
-      { name: "Cli", email: "cli@example.com" },
-    ]);
+    assert.deepEqual(config.identities, [{ name: "Cli", email: "cli@example.com" }]);
   });
 });
 

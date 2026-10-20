@@ -1,14 +1,10 @@
 #!/usr/bin/env node
+import { resolve } from "node:path";
+import process from "node:process";
 import { parseCli, printUsage } from "./cli.ts";
 import { runInit } from "./init.ts";
 import { rewrite } from "./rewriter.ts";
-import {
-  branchExists,
-  isWorkingTreeClean,
-  resolveRewriteTarget,
-} from "./utils.ts";
-import { resolve } from "node:path";
-import process from "node:process";
+import { branchExists, isWorkingTreeClean, resolveRewriteTarget } from "./utils.ts";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -27,9 +23,7 @@ async function main() {
 
   // Safety checks
   if (!config.dryRun && !isWorkingTreeClean(config.repoPath)) {
-    console.error(
-      "Error: working tree has uncommitted changes. Commit or stash them first.",
-    );
+    console.error("Error: working tree has uncommitted changes. Commit or stash them first.");
     process.exit(1);
   }
 
@@ -49,26 +43,16 @@ async function main() {
     process.exit(1);
   }
 
+  console.log(`Herodotus: rewriting ${config.branch}${config.dryRun ? " (dry run)" : ""}`);
+  console.log(`  Identities: ${config.identities.map((i) => `${i.name} <${i.email}>`).join(", ")}`);
   console.log(
-    `Herodotus: rewriting ${config.branch}${config.dryRun ? " (dry run)" : ""}`,
+    `  Schedule: ${Math.floor(config.schedule.start / 60)}:${String(
+      config.schedule.start % 60,
+    ).padStart(2, "0")} – ${Math.floor(config.schedule.end / 60)}:${String(
+      config.schedule.end % 60,
+    ).padStart(2, "0")} ${config.schedule.timezone}`,
   );
-  console.log(
-    `  Identities: ${
-      config.identities.map((i) => `${i.name} <${i.email}>`).join(", ")
-    }`,
-  );
-  console.log(
-    `  Schedule: ${Math.floor(config.schedule.start / 60)}:${
-      String(config.schedule.start % 60).padStart(2, "0")
-    } – ${Math.floor(config.schedule.end / 60)}:${
-      String(config.schedule.end % 60).padStart(2, "0")
-    } ${config.schedule.timezone}`,
-  );
-  console.log(
-    `  Mode: ${
-      config.inPlace ? "in-place" : `new branch ${targetName}`
-    }`,
-  );
+  console.log(`  Mode: ${config.inPlace ? "in-place" : `new branch ${targetName}`}`);
   console.log();
 
   const { changes, backupRef } = await rewrite(config);
@@ -76,10 +60,8 @@ async function main() {
   if (config.dryRun) {
     console.log("Changes that would be applied:\n");
     for (const c of changes) {
-      const origDate = new Date(parseInt(c.authorDate.split(" ")[0]) * 1000)
-        .toISOString();
-      const newDate = new Date(parseInt(c.newAuthorDate!.split(" ")[0]) * 1000)
-        .toISOString();
+      const origDate = new Date(parseInt(c.authorDate.split(" ")[0]) * 1000).toISOString();
+      const newDate = new Date(parseInt(c.newAuthorDate!.split(" ")[0]) * 1000).toISOString();
       console.log(`  #${c.index + 1}: "${c.message}"`);
       console.log(
         `    Author:  ${c.originalAuthor.name} <${c.originalAuthor.email}> → ${
@@ -94,9 +76,7 @@ async function main() {
     if (backupRef) {
       console.log(`Backup of the original ${config.branch} stored at: ${backupRef}`);
       if (backupRef !== config.backup) {
-        console.log(
-          `  (${config.backup} already held an earlier backup and was left unchanged)`,
-        );
+        console.log(`  (${config.backup} already held an earlier backup and was left unchanged)`);
       }
     }
   }

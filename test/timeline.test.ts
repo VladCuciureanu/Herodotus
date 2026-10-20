@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { redistributeTimestamps } from "../src/timeline.ts";
 import type { ScheduleConfig } from "../src/types.ts";
 
@@ -65,7 +65,10 @@ describe("redistributeTimestamps", () => {
     const timestamps = [base, base + 600, base + 7200];
     const r1 = redistributeTimestamps(timestamps, schedule, 123);
     const r2 = redistributeTimestamps(timestamps, schedule, 456);
-    assert.equal(r1.some((v, i) => v !== r2[i]), true);
+    assert.equal(
+      r1.some((v, i) => v !== r2[i]),
+      true,
+    );
   });
 });
 
@@ -76,9 +79,7 @@ describe("redistributeTimestamps preserves commit density", () => {
   const timestamps = Array.from({ length: 90 }, (_, i) => base + i * DAY);
 
   function distinctDays(result: number[]): number {
-    return new Set(
-      result.map((ts) => new Date(ts * 1000).toISOString().slice(0, 10)),
-    ).size;
+    return new Set(result.map((ts) => new Date(ts * 1000).toISOString().slice(0, 10))).size;
   }
 
   it("keeps months of history spread across days (forward)", () => {

@@ -1,5 +1,5 @@
-import type { ScheduleConfig } from "./types.ts";
 import { gaussianRandom, seededRandom } from "./random.ts";
+import type { ScheduleConfig } from "./types.ts";
 
 const MIN_GAP_MS = 2 * 60 * 1000; // 2 minutes
 const MAX_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -78,9 +78,7 @@ function advanceToWorkSlot(date: Date, schedule: ScheduleConfig): Date {
     // Jump to next day at work start time
     const mins = getMinutesInTz(d, schedule.timezone);
     const minsUntilMidnight = 24 * 60 - mins;
-    d = new Date(
-      d.getTime() + (minsUntilMidnight + schedule.start) * 60 * 1000,
-    );
+    d = new Date(d.getTime() + (minsUntilMidnight + schedule.start) * 60 * 1000);
   }
 
   // Fallback: return as-is (shouldn't happen with valid config)
@@ -232,9 +230,10 @@ export function redistributeTimestamps(
 ): number[] {
   if (timestamps.length === 0) return [];
   if (timestamps.length === 1) {
-    const d = schedule.anchor.type === "start"
-      ? advanceToWorkSlot(schedule.anchor.date, schedule)
-      : retreatToWorkSlot(schedule.anchor.date, schedule);
+    const d =
+      schedule.anchor.type === "start"
+        ? advanceToWorkSlot(schedule.anchor.date, schedule)
+        : retreatToWorkSlot(schedule.anchor.date, schedule);
     return [Math.floor(d.getTime() / 1000)];
   }
 

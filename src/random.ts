@@ -15,11 +15,7 @@ export function seededRandom(seed: number): () => number {
 /**
  * Box-Muller transform for gaussian random numbers.
  */
-export function gaussianRandom(
-  rng: () => number,
-  mean: number,
-  stddev: number,
-): number {
+export function gaussianRandom(rng: () => number, mean: number, stddev: number): number {
   const u1 = rng();
   const u2 = rng();
   const z = Math.sqrt(-2 * Math.log(u1 || 1e-10)) * Math.cos(2 * Math.PI * u2);

@@ -1,19 +1,12 @@
-import { parseArgs } from "node:util";
 import { resolve } from "node:path";
+import { parseArgs } from "node:util";
+import { buildConfig, type ConfigOverrides, loadConfigAsync, parseSchedule } from "./config.ts";
 import type { HerodotusConfig, Identity } from "./types.ts";
-import {
-  buildConfig,
-  type ConfigOverrides,
-  loadConfigAsync,
-  parseSchedule,
-} from "./config.ts";
 
 function parseIdentity(s: string): Identity {
   const colonIdx = s.lastIndexOf(":");
   if (colonIdx === -1) {
-    throw new Error(
-      `Invalid identity format: "${s}". Expected "Name:email@example.com"`,
-    );
+    throw new Error(`Invalid identity format: "${s}". Expected "Name:email@example.com"`);
   }
   return {
     name: s.slice(0, colonIdx).trim(),
@@ -25,9 +18,7 @@ function parseIdentity(s: string): Identity {
  * Parse CLI arguments into a config. Returns null when --help was requested;
  * the caller decides how to show usage and exit.
  */
-export async function parseCli(
-  argv: string[],
-): Promise<HerodotusConfig | null> {
+export async function parseCli(argv: string[]): Promise<HerodotusConfig | null> {
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
@@ -67,9 +58,7 @@ export async function parseCli(
   if (values.seed) {
     const seed = parseInt(values.seed, 10);
     if (!Number.isFinite(seed) || seed < 0) {
-      throw new Error(
-        `Invalid seed: "${values.seed}". Must be a non-negative integer`,
-      );
+      throw new Error(`Invalid seed: "${values.seed}". Must be a non-negative integer`);
     }
     cliArgs.seed = seed;
   }

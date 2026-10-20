@@ -1,5 +1,5 @@
-import type { Identity } from "./types.ts";
 import { seededRandom } from "./random.ts";
+import type { Identity } from "./types.ts";
 
 export function createIdentityPicker(
   identities: Identity[],

@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { capitalizeConventionalCommit } from "../src/commit-message.ts";
 
 describe("capitalizeConventionalCommit", () => {
@@ -26,7 +26,10 @@ describe("capitalizeConventionalCommit", () => {
   it("handles chore, docs, refactor, etc.", () => {
     assert.equal(capitalizeConventionalCommit("chore: update deps"), "chore: Update deps");
     assert.equal(capitalizeConventionalCommit("docs: add readme"), "docs: Add readme");
-    assert.equal(capitalizeConventionalCommit("refactor: extract helper"), "refactor: Extract helper");
+    assert.equal(
+      capitalizeConventionalCommit("refactor: extract helper"),
+      "refactor: Extract helper",
+    );
   });
 
   it("only affects first line", () => {
