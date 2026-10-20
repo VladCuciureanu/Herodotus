@@ -49,7 +49,7 @@ Node.js 26+ and git.
 ## Install
 
 ```bash
-npm install
+npm install # also builds dist/
 npm link    # puts `herodotus` on your PATH
 ```
 
@@ -141,6 +141,11 @@ calls.
 ## Development
 
 ```bash
-npm test           # node:test, test/*.test.ts
+npm run dev        # run src/main.ts with --watch
+npm test           # node:test, test/**/*.test.ts
 npm run typecheck  # tsc
+npm run lint       # biome lint
+npm run format     # biome check --write
+npm run check      # biome check, typecheck and tests
+npm run build      # compile src/ to dist/
 ```

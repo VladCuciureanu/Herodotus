@@ -4,20 +4,30 @@
   "private": true,
   "type": "module",
   "bin": {
-    "herodotus": "./src/main.ts"
+    "herodotus": "dist/main.js"
   },
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=26"
   },
   "scripts": {
+    "dev": "node --watch src/main.ts",
     "start": "node src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
     "test": "node --test \"test/**/*.test.ts\"",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "lint": "biome lint",
+    "format": "biome check --write",
+    "check": "biome check && npm run typecheck && npm test"
   },
   "dependencies": {
     "smol-toml": "^1.9.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@types/node": "^26.6.5",
     "typescript": "^7.0.2"
   }
