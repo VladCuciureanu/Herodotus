@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { resolve } from "node:path";
 import process from "node:process";
-import { parseCli, printUsage } from "./cli.ts";
+import { parseCli, parseInitCli, printUsage, UsageError } from "./cli.ts";
 import { runInit } from "./init.ts";
 import { rewrite } from "./rewriter.ts";
 import { branchExists, isWorkingTreeClean, resolveRewriteTarget } from "./utils.ts";
@@ -10,8 +9,9 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args[0] === "init") {
-    const repoPath = resolve(args[1] ?? ".");
-    await runInit(repoPath);
+    const options = parseInitCli(args.slice(1));
+    if (!options) printUsage();
+    else await runInit(options.repoPath, options.configPath);
     return;
   }
 
@@ -82,7 +82,8 @@ function formatError(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
   const line = message.trim().replace(/\s*\n\s*/g, " ");
   const isUsageError =
-    err instanceof Error && "code" in err && String(err.code).startsWith("ERR_PARSE_ARGS");
+    err instanceof UsageError ||
+    (err instanceof Error && "code" in err && String(err.code).startsWith("ERR_PARSE_ARGS"));
   return `herodotus: ${line}${isUsageError ? " See herodotus --help." : ""}`;
 }
 

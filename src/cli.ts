@@ -3,6 +3,17 @@ import { parseArgs } from "node:util";
 import { buildConfig, type ConfigOverrides, loadConfigAsync, parseSchedule } from "./config.ts";
 import type { HerodotusConfig, Identity } from "./types.ts";
 
+/** A command-line mistake that parseArgs itself does not catch. */
+export class UsageError extends Error {}
+
+/** Resolve the optional <repo-path> positional, refusing any extra ones. */
+function repoPathFrom(positionals: string[]): string {
+  if (positionals.length > 1) {
+    throw new UsageError(`Unexpected argument: "${positionals[1]}"`);
+  }
+  return resolve(positionals[0] ?? ".");
+}
+
 function parseIdentity(s: string): Identity {
   const colonIdx = s.lastIndexOf(":");
   if (colonIdx === -1) {
@@ -42,7 +53,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig | null> 
 
   if (values.help) return null;
 
-  const repoPath = resolve(positionals[0] ?? ".");
+  const repoPath = repoPathFrom(positionals);
 
   const fileConfig = await loadConfigAsync(values.config, repoPath);
 
@@ -75,10 +86,33 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig | null> 
   return buildConfig(cliArgs, fileConfig, repoPath);
 }
 
+export interface InitOptions {
+  repoPath: string;
+  configPath?: string;
+}
+
+/**
+ * Parse the arguments after `init`. Returns null when --help was requested.
+ */
+export function parseInitCli(argv: string[]): InitOptions | null {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      config: { type: "string", short: "c" },
+      help: { type: "boolean", short: "h", default: false },
+    },
+    allowPositionals: true,
+    strict: true,
+  });
+
+  if (values.help) return null;
+  return { repoPath: repoPathFrom(positionals), configPath: values.config };
+}
+
 export const USAGE = `herodotus — rewrite git history with plausible identities & timestamps
 
 Usage: herodotus [options] [<repo-path>]
-       herodotus init [<repo-path>]
+       herodotus init [-c <file>] [<repo-path>]
 
 Options:
   -i, --identity <name:email>  Identity to use (repeatable)

@@ -59,12 +59,12 @@ Without linking, run it as `npm start -- <args>`.
 
 ```
 herodotus [options] [<repo-path>]
-herodotus init [<repo-path>]
+herodotus init [-c <file>] [<repo-path>]
 ```
 
 `<repo-path>` defaults to the current directory. `init` writes a
-`.herodotus.toml` prefilled with your git identity and refuses to overwrite an
-existing one.
+`.herodotus.toml` (or the file given with `-c`, relative to `<repo-path>`)
+prefilled with your git identity and refuses to overwrite an existing one.
 
 | Option                        | Default                         | Description                                         |
 | ----------------------------- | ------------------------------- | --------------------------------------------------- |

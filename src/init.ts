@@ -12,11 +12,12 @@ function getGitConfig(key: string, cwd: string): string | null {
   return result.stdout.trim();
 }
 
-export async function runInit(repoPath: string): Promise<void> {
-  const configPath = resolve(repoPath, ".herodotus.toml");
+/** Write a starter config to `configPath` (relative to the repo), never overwriting. */
+export async function runInit(repoPath: string, configPath = ".herodotus.toml"): Promise<void> {
+  const filePath = resolve(repoPath, configPath);
 
-  if (existsSync(configPath)) {
-    throw new Error(".herodotus.toml already exists.");
+  if (existsSync(filePath)) {
+    throw new Error(`${configPath} already exists.`);
   }
 
   const name = getGitConfig("user.name", repoPath) ?? "Your Name";
@@ -36,6 +37,6 @@ email = "${email}"
 # endDate = "2026-12-31T18:00:00"
 `;
 
-  await writeFile(configPath, content);
-  console.log(`Created .herodotus.toml`);
+  await writeFile(filePath, content);
+  console.log(`Created ${configPath}`);
 }

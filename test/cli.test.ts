@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -54,6 +54,39 @@ describe("CLI errors", () => {
   });
 });
 
+describe("herodotus init", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "herodotus-init-cli-"));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("prints usage for --help instead of treating it as a path", () => {
+    const result = herodotus(["init", "--help"], dir);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^Usage: herodotus/m);
+    assert.deepEqual(readdirSync(dir), []);
+  });
+
+  it("writes the file named by -c, relative to the repo", () => {
+    const result = herodotus(["init", "-c", "custom.toml", dir]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(existsSync(join(dir, "custom.toml")));
+    assert.ok(!existsSync(join(dir, ".herodotus.toml")));
+    assert.match(readFileSync(join(dir, "custom.toml"), "utf8"), /\[\[identity\]\]/);
+  });
+
+  it("rejects unknown options and extra arguments", () => {
+    assertError(herodotus(["init", "--bogus", dir]), /Unknown option '--bogus'/);
+    assertError(herodotus(["init", dir, "extra"]), /Unexpected argument: "extra".*--help/);
+    assert.deepEqual(readdirSync(dir), []);
+  });
+});
+
 describe("parseCli", () => {
   let repoDir: string;
 
@@ -67,6 +100,10 @@ describe("parseCli", () => {
 
   const parse = (...args: string[]) =>
     parseCli(["-i", "A:a@example.com", "-b", "main", ...args, repoDir]);
+
+  it("rejects more than one repo path", async () => {
+    await assert.rejects(parse("extra"), /Unexpected argument/);
+  });
 
   it("accepts a non-negative integer seed", async () => {
     assert.equal((await parse("--seed", "0"))?.seed, 0);
