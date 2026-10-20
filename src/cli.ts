@@ -1,6 +1,5 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
-import process from "node:process";
 import type { HerodotusConfig, Identity } from "./types.ts";
 import {
   buildConfig,
@@ -22,7 +21,13 @@ function parseIdentity(s: string): Identity {
   };
 }
 
-export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
+/**
+ * Parse CLI arguments into a config. Returns null when --help was requested;
+ * the caller decides how to show usage and exit.
+ */
+export async function parseCli(
+  argv: string[],
+): Promise<HerodotusConfig | null> {
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
@@ -44,10 +49,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
     strict: true,
   });
 
-  if (values.help) {
-    printUsage();
-    process.exit(0);
-  }
+  if (values.help) return null;
 
   const repoPath = resolve(positionals[0] ?? ".");
 
@@ -84,7 +86,7 @@ export async function parseCli(argv: string[]): Promise<HerodotusConfig> {
   return buildConfig(cliArgs, fileConfig, repoPath);
 }
 
-function printUsage(): void {
+export function printUsage(): void {
   console.log(
     `herodotus — rewrite git history with plausible identities & timestamps
 

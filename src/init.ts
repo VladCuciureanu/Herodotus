@@ -2,7 +2,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import process from "node:process";
 
 function getGitConfig(key: string, cwd: string): string | null {
   const result = spawnSync("git", ["config", key], {
@@ -17,8 +16,7 @@ export async function runInit(repoPath: string): Promise<void> {
   const configPath = resolve(repoPath, ".herodotus.toml");
 
   if (existsSync(configPath)) {
-    console.error("Error: .herodotus.toml already exists.");
-    process.exit(1);
+    throw new Error(".herodotus.toml already exists.");
   }
 
   const name = getGitConfig("user.name", repoPath) ?? "Your Name";

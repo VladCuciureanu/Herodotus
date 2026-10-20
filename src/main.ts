@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseCli } from "./cli.ts";
+import { parseCli, printUsage } from "./cli.ts";
 import { runInit } from "./init.ts";
 import { rewrite } from "./rewriter.ts";
 import { branchExists, isWorkingTreeClean } from "./utils.ts";
@@ -16,6 +16,10 @@ async function main() {
   }
 
   const config = await parseCli(args);
+  if (!config) {
+    printUsage();
+    return;
+  }
 
   // Safety checks
   if (!config.dryRun && !isWorkingTreeClean(config.repoPath)) {

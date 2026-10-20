@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseCli } from "../src/cli.ts";
 import { parseSchedule } from "../src/config.ts";
+import { runInit } from "../src/init.ts";
 
 describe("parseSchedule", () => {
   it("only sets the fields that were provided", () => {
@@ -110,5 +111,21 @@ endDate = "2024-06-01T12:00:00Z"
     assert.deepEqual(config.identities, [
       { name: "Cli", email: "cli@example.com" },
     ]);
+  });
+});
+
+describe("library functions do not exit the process", () => {
+  it("parseCli returns null for --help instead of exiting", async () => {
+    assert.equal(await parseCli(["--help"]), null);
+  });
+
+  it("runInit throws when the config file already exists", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "herodotus-init-"));
+    try {
+      writeFileSync(join(dir, ".herodotus.toml"), "");
+      await assert.rejects(runInit(dir), /already exists/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
