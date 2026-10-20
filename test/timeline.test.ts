@@ -68,3 +68,49 @@ describe("redistributeTimestamps", () => {
     assert.equal(r1.some((v, i) => v !== r2[i]), true);
   });
 });
+
+describe("redistributeTimestamps preserves commit density", () => {
+  const DAY = 24 * 3600;
+  // One commit a day at 03:00 UTC for ~3 months
+  const base = Math.floor(new Date("2024-01-01T03:00:00Z").getTime() / 1000);
+  const timestamps = Array.from({ length: 90 }, (_, i) => base + i * DAY);
+
+  function distinctDays(result: number[]): number {
+    return new Set(
+      result.map((ts) => new Date(ts * 1000).toISOString().slice(0, 10)),
+    ).size;
+  }
+
+  it("keeps months of history spread across days (forward)", () => {
+    const result = redistributeTimestamps(timestamps, schedule, 42);
+    const spanDays = (result[result.length - 1] - result[0]) / DAY;
+    assert.ok(spanDays >= 80, `span was ${spanDays.toFixed(1)} days`);
+    assert.ok(distinctDays(result) >= 60, `${distinctDays(result)} days`);
+    for (let i = 1; i < result.length; i++) {
+      assert.ok(result[i] > result[i - 1]);
+    }
+  });
+
+  it("keeps months of history spread across days (backward)", () => {
+    const backward: ScheduleConfig = {
+      ...schedule,
+      anchor: { type: "end", date: new Date("2024-06-28T17:00:00Z") },
+    };
+    const result = redistributeTimestamps(timestamps, backward, 42);
+    const spanDays = (result[result.length - 1] - result[0]) / DAY;
+    assert.ok(spanDays >= 80, `span was ${spanDays.toFixed(1)} days`);
+    assert.ok(distinctDays(result) >= 60, `${distinctDays(result)} days`);
+    assert.ok(result[result.length - 1] <= backward.anchor.date.getTime() / 1000);
+    for (let i = 1; i < result.length; i++) {
+      assert.ok(result[i] > result[i - 1]);
+    }
+  });
+
+  it("keeps a burst of commits within the same session", () => {
+    // Five commits ten minutes apart in the middle of the night
+    const night = Math.floor(new Date("2024-01-09T02:00:00Z").getTime() / 1000);
+    const burst = Array.from({ length: 5 }, (_, i) => night + i * 600);
+    const result = redistributeTimestamps(burst, schedule, 42);
+    assert.ok(result[4] - result[0] < 3 * 3600);
+  });
+});
