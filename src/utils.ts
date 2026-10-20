@@ -46,20 +46,29 @@ export interface RewriteTarget {
 }
 
 /**
- * Resolve the ref to rewrite to its full refname and pick the new local
- * branch it is written to, so the source ref is never overwritten whatever
- * its namespace (refs/heads, refs/remotes, refs/tags, ...).
+ * Resolve the ref to rewrite to its full refname, refusing anything that
+ * cannot be rewritten safely in either mode: revisions that are not refs
+ * (a commit hash, HEAD~2, a detached HEAD), ambiguous names, and annotated
+ * tags (rewriting one would replace the tag object, losing its message,
+ * tagger and signature).
  */
-export function resolveRewriteTarget(
-  repoPath: string,
-  branch: string,
-): RewriteTarget {
-  let source = "";
-  try {
-    source = run(["git", "rev-parse", "--symbolic-full-name", branch], repoPath);
-  } catch {
-    // fall through to the error below
+export function resolveSourceRef(repoPath: string, branch: string): string {
+  const result = spawnSync(
+    "git",
+    ["rev-parse", "--symbolic-full-name", branch],
+    { cwd: repoPath, encoding: "utf8" },
+  );
+  if (result.error) throw result.error;
+  if (/ambiguous/i.test(result.stderr)) {
+    const refs = run(["git", "show-ref", "--", branch], repoPath)
+      .split("\n")
+      .map((line) => line.split(" ")[1])
+      .filter(Boolean);
+    throw new Error(
+      `"${branch}" is ambiguous; it matches ${refs.join(", ")}. Pass the full refname instead (e.g. -b ${refs[0] ?? `refs/heads/${branch}`}).`,
+    );
   }
+  const source = result.status === 0 ? result.stdout.trim() : "";
   if (!source.startsWith("refs/")) {
     throw new Error(
       `"${branch}" does not name a branch or other ref. Create a branch from it first (git branch <name> ${branch}).`,
@@ -73,22 +82,38 @@ export function resolveRewriteTarget(
       `"${branch}" is an annotated tag, which cannot be rewritten without replacing it. Create a branch from it first (git branch <name> ${branch}).`,
     );
   }
-  const shortName = run(["git", "rev-parse", "--abbrev-ref", source], repoPath);
+  return source;
+}
+
+/**
+ * Resolve the ref to rewrite (see resolveSourceRef) and pick the new local
+ * branch it is written to, so the source ref is never overwritten whatever
+ * its namespace (refs/heads, refs/remotes, refs/tags, ...).
+ */
+export function resolveRewriteTarget(
+  repoPath: string,
+  branch: string,
+): RewriteTarget {
+  const source = resolveSourceRef(repoPath, branch);
+  // Strip the namespace by hand: `rev-parse --abbrev-ref` would keep a
+  // "heads/" prefix for a name that also exists as a tag.
+  const shortName = source.replace(/^refs\/(?:(?:heads|remotes|tags)\/)?/, "");
   return { source, target: `refs/heads/herodotus/${shortName}` };
 }
 
 /**
- * Point a backup ref at the branch's current commit without ever overwriting an
+ * Point a backup ref at exactly the object the ref holds (never peeled, so a
+ * tag object would stay referenced) without ever overwriting an
  * existing backup: if `backupRef` is taken (e.g. by an earlier in-place run),
  * a timestamped `<backupRef>@<unix-ts>` is written instead. Returns the ref
  * that holds the backup.
  */
 export function createBackupRef(
   repoPath: string,
-  branch: string,
+  sourceRef: string,
   backupRef: string,
 ): string {
-  const sha = run(["git", "rev-parse", "--verify", `${branch}^{commit}`], repoPath);
+  const sha = run(["git", "rev-parse", "--verify", sourceRef], repoPath);
   const ts = Math.floor(Date.now() / 1000);
   const candidates = [backupRef, `${backupRef}@${ts}`];
   for (let n = 2; n <= 100; n++) candidates.push(`${backupRef}@${ts}-${n}`);

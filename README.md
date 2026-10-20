@@ -98,10 +98,17 @@ jitter so the result doesn't look mechanical.
 **Safety**: By default, Herodotus writes to a new local `herodotus/<branch>`
 branch, leaving your original history untouched. This holds for any ref you pass
 with `-b`, not only local branches: `-b origin/main` writes
-`herodotus/origin/main` and leaves `refs/remotes/origin/main` alone. Revisions
-that are not refs (a commit hash, `HEAD~2`) and annotated tags are refused;
-create a branch from them first. Use `--in-place` to rewrite directly: the
-original commit is kept in `refs/original/herodotus/<branch>`. Backups are never
+`herodotus/origin/main` and leaves `refs/remotes/origin/main` alone.
+
+In every mode, revisions that are not refs (a commit hash, `HEAD~2`, a detached
+`HEAD`) and annotated tags are refused; create a branch from them first. A name
+that is both a branch and a tag is refused as ambiguous; pass the full refname
+(e.g. `-b refs/heads/release`).
+
+Use `--in-place` to rewrite the given ref itself: the ref's original value is
+kept in `refs/original/herodotus/<branch>`. This applies to whatever ref you
+pass, so `--in-place -b origin/main` rewrites the remote-tracking ref
+`refs/remotes/origin/main` (backed up first). Backups are never
 overwritten; if that ref already exists (say, from an earlier in-place run), it
 is left as is and the backup goes to a timestamped
 `refs/original/herodotus/<branch>@<unix-ts>` instead. The output names the ref

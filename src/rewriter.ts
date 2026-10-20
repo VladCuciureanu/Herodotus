@@ -321,13 +321,18 @@ export interface RewriteResult {
 export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
   const { repoPath, branch, schedule, seed } = config;
 
+  // Both modes need a real, unambiguous ref that is safe to rewrite; this
+  // refuses commit hashes, detached HEAD, ambiguous names and annotated tags.
+  // Default mode writes to herodotus/<name>; in-place rewrites `source` itself.
+  const { source, target } = resolveRewriteTarget(repoPath, branch);
+
   // Export (keep as raw bytes). --reencode=yes converts commit messages with a
   // non-UTF-8 "encoding" header to UTF-8 (fast-export aborts on them by
   // default); blob contents are never re-encoded.
   const fullExportProc = spawnSync("git", [
     "fast-export",
     "--reencode=yes",
-    branch,
+    source,
   ], {
     cwd: repoPath,
     maxBuffer: Infinity,
@@ -410,21 +415,16 @@ export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
   // remote-tracking refs and tags too, and never overwrites the source ref.
   // The rename is applied to parsed command lines only, so blob bytes are
   // never decoded/re-encoded (which would corrupt non-UTF-8 content).
-  let refRename: RefRename | undefined;
-  if (!config.inPlace) {
-    const { source, target } = resolveRewriteTarget(repoPath, branch);
-    refRename = { from: source, to: target };
-  }
   const modifiedStream = rebuildFastExport(
     parsedExport,
     modifications,
-    refRename,
+    config.inPlace ? undefined : { from: source, to: target },
   );
 
   // Create backup if in-place. An existing backup is never overwritten.
   let backupRef: string | undefined;
   if (config.inPlace && config.backup) {
-    backupRef = createBackupRef(repoPath, branch, config.backup);
+    backupRef = createBackupRef(repoPath, source, config.backup);
   }
 
   // Import using raw bytes

@@ -38,12 +38,11 @@ async function main() {
     process.exit(1);
   }
 
+  // Refuses non-refs, ambiguous names and annotated tags in both modes.
   // Default mode writes to a new local branch and never touches the source ref.
-  const target = config.inPlace
-    ? undefined
-    : resolveRewriteTarget(config.repoPath, config.branch).target;
-  const targetName = target?.replace(/^refs\/heads\//, "");
-  if (target && branchExists(config.repoPath, target)) {
+  const { target } = resolveRewriteTarget(config.repoPath, config.branch);
+  const targetName = target.replace(/^refs\/heads\//, "");
+  if (!config.inPlace && branchExists(config.repoPath, target)) {
     console.error(
       `Error: branch "${targetName}" already exists. Delete it first or use --in-place.`,
     );

@@ -212,6 +212,48 @@ describe("rewriter", () => {
     assert.equal(second.backupRef, extraRef);
   });
 
+  it("refuses an annotated tag in in-place mode and keeps the tag object", async () => {
+    git(["tag", "-a", "v1", "-m", "release"], repoDir);
+    const tagObject = git(["rev-parse", "refs/tags/v1"], repoDir);
+    const backup = "refs/original/herodotus/v1";
+
+    await assert.rejects(
+      rewrite(makeConfig({ branch: "v1", inPlace: true, backup })),
+      /annotated tag/,
+    );
+
+    assert.equal(git(["rev-parse", "refs/tags/v1"], repoDir), tagObject);
+    assert.equal(git(["cat-file", "-t", "refs/tags/v1"], repoDir), "tag");
+    assert.equal(git(["for-each-ref", "refs/original/"], repoDir), "");
+  });
+
+  it("refuses non-ref revisions in in-place mode", async () => {
+    const head = git(["rev-parse", "main"], repoDir);
+    await assert.rejects(
+      rewrite(makeConfig({ branch: head, inPlace: true, backup: false })),
+      /does not name a branch or other ref/,
+    );
+    git(["checkout", "-q", "--detach"], repoDir);
+    await assert.rejects(
+      rewrite(makeConfig({ branch: "HEAD", inPlace: true, backup: false })),
+      /does not name a branch or other ref/,
+    );
+    assert.equal(git(["rev-parse", "main"], repoDir), head);
+  });
+
+  it("calls a name that is both a tag and a branch ambiguous", async () => {
+    git(["branch", "dup"], repoDir);
+    git(["tag", "dup"], repoDir);
+    for (const inPlace of [false, true]) {
+      await assert.rejects(
+        rewrite(makeConfig({ branch: "dup", inPlace })),
+        /ambiguous.*refs\/heads\/dup/s,
+      );
+    }
+    await rewrite(makeConfig({ branch: "refs/heads/dup" }));
+    assert.ok(git(["rev-parse", "--verify", "refs/heads/herodotus/dup"], repoDir));
+  });
+
   it("re-encodes non-UTF-8 commit messages and keeps blobs byte-exact", async (t) => {
     // Latin-1 bytes in both the message and a file: only the message may change.
     const latin1 = Buffer.from([0x43, 0x61, 0x66, 0xe9, 0x20, 0xff, 0x0a]); // "Café ÿ\n"
