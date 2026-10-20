@@ -138,8 +138,9 @@ describe("redistributeTimestamps in a non-UTC timezone", () => {
     });
     for (const ts of result) {
       const parts = fmt.formatToParts(new Date(ts * 1000));
+      // biome-ignore lint/style/noNonNullAssertion: the formatter always emits these parts
       const get = (t: string) => parts.find((p) => p.type === t)!.value;
-      const mins = parseInt(get("hour")) * 60 + parseInt(get("minute"));
+      const mins = parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10);
       assert.ok(mins >= 9 * 60 && mins < 18 * 60, `local ${get("hour")}:${get("minute")}`);
       assert.ok(!["Sat", "Sun"].includes(get("weekday")), get("weekday"));
     }

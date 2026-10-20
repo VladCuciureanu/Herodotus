@@ -25,7 +25,7 @@ function formatAuthorLine(prefix: string, identity: Identity, timestamp: string)
 }
 
 function parseTimestamp(ts: string): number {
-  return parseInt(ts.split(" ")[0]);
+  return parseInt(ts.split(" ")[0], 10);
 }
 
 function formatTimestamp(epoch: number, tzOffset: string): string {
@@ -141,7 +141,7 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
       let message = "";
       if (startsWith(buf, offset, "data ")) {
         const { line, next } = readLine(buf, offset);
-        const dataLength = parseInt(line.split(" ")[1]);
+        const dataLength = parseInt(line.split(" ")[1], 10);
         offset = next;
 
         // Read exactly dataLength bytes as the message (commit messages are text)
@@ -201,7 +201,7 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
       // Read data section
       if (startsWith(buf, offset, "data ")) {
         const { line, next } = readLine(buf, offset);
-        const blobSize = parseInt(line.split(" ")[1]);
+        const blobSize = parseInt(line.split(" ")[1], 10);
         offset = next + blobSize;
         // Skip trailing LF
         if (offset < buf.length && buf[offset] === LF) {
@@ -247,7 +247,7 @@ function rebuildFastExport(
       const renamed = renameCommand(reset.line, "reset");
       if (renamed === reset.line) continue;
       chunks.push(buf.subarray(lastEnd, reset.start));
-      chunks.push(encoder.encode(renamed + "\n"));
+      chunks.push(encoder.encode(`${renamed}\n`));
       lastEnd = reset.end;
     }
     chunks.push(buf.subarray(lastEnd, until));
@@ -267,7 +267,7 @@ function rebuildFastExport(
       if (line.startsWith("commit ")) return renameCommand(line, "commit");
       return line;
     });
-    chunks.push(encoder.encode(headerLines.join("\n") + "\n"));
+    chunks.push(encoder.encode(`${headerLines.join("\n")}\n`));
 
     // Write new data section with modified message
     const msgBytes = encoder.encode(mod.message);

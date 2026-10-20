@@ -205,6 +205,7 @@ describe("rewriter", () => {
     assert.equal(refs.length, 2);
     const extra = refs.find((r) => !r.startsWith(`${backup} `));
     assert.match(extra ?? "", /^refs\/original\/herodotus\/main@\d+ /);
+    // biome-ignore lint/style/noNonNullAssertion: asserted to match just above
     const [extraRef, extraSha] = extra!.split(" ");
     assert.equal(extraSha, firstRewrite);
     assert.equal(second.backupRef, extraRef);

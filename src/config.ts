@@ -8,8 +8,8 @@ import { getCurrentBranch, getDefaultIdentity } from "./utils.ts";
 export function parseTime(s: string): number {
   const match = s.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) throw new Error(`Invalid time format: "${s}". Expected "HH:MM"`);
-  const h = parseInt(match[1]);
-  const m = parseInt(match[2]);
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
   if (h > 23 || m > 59) {
     throw new Error(`Invalid time: "${s}". Hours must be 0-23, minutes 0-59`);
   }
@@ -41,14 +41,14 @@ export function parseAnchor(startDate?: string, endDate?: string): ScheduleConfi
   }
   if (startDate) {
     const d = new Date(startDate);
-    if (isNaN(d.getTime())) {
+    if (Number.isNaN(d.getTime())) {
       throw new Error(`Invalid start date: "${startDate}"`);
     }
     return { type: "start", date: d };
   }
   if (endDate) {
     const d = new Date(endDate);
-    if (isNaN(d.getTime())) throw new Error(`Invalid end date: "${endDate}"`);
+    if (Number.isNaN(d.getTime())) throw new Error(`Invalid end date: "${endDate}"`);
     return { type: "end", date: d };
   }
   return { type: "end", date: new Date() };

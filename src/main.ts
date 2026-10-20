@@ -60,13 +60,13 @@ async function main() {
   if (config.dryRun) {
     console.log("Changes that would be applied:\n");
     for (const c of changes) {
-      const origDate = new Date(parseInt(c.authorDate.split(" ")[0]) * 1000).toISOString();
-      const newDate = new Date(parseInt(c.newAuthorDate!.split(" ")[0]) * 1000).toISOString();
+      const origDate = new Date(parseInt(c.authorDate.split(" ")[0], 10) * 1000).toISOString();
+      const newDate = new Date(parseInt(c.newAuthorDate.split(" ")[0], 10) * 1000).toISOString();
       console.log(`  #${c.index + 1}: "${c.message}"`);
       console.log(
         `    Author:  ${c.originalAuthor.name} <${c.originalAuthor.email}> → ${
-          c.newAuthor!.name
-        } <${c.newAuthor!.email}>`,
+          c.newAuthor.name
+        } <${c.newAuthor.email}>`,
       );
       console.log(`    Date:    ${origDate} → ${newDate}`);
       console.log();
