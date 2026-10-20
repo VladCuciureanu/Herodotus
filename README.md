@@ -2,122 +2,145 @@
 
 > _"History is written by the victors."_
 
-A git history rewriter that makes your commit log look like it was written by a
-well-adjusted developer with healthy work habits.
+Rewrites a git branch so it looks like the work of one well-adjusted developer:
+your chosen identity, commits inside office hours, and no AI co-author
+trailers.
 
-## What it does
+```console
+$ herodotus --dry-run -i "Ada Lovelace:ada@example.com" --timezone Europe/London \n    --end-date 2026-03-20T17:00:00Z --seed 1
+Herodotus: rewriting main (dry run)
+  Identities: Ada Lovelace <ada@example.com>
+  Schedule: 9:00 – 18:00 Europe/London
+  Mode: new branch herodotus/main
 
-- **Rewrites authors** — Replaces all commit authors and committers with an
-  identity of your choosing
-- **Fixes your schedule** — Redistributes commit timestamps into realistic
-  working hours (no more 3 AM commits)
-- **Scrubs AI traces** — Strips `Co-Authored-By` trailers from Claude, Copilot,
-  ChatGPT, and other AI assistants
-- **Preserves the narrative** — Keeps commit order, relative pacing, and human
-  co-author credits intact
+Changes that would be applied:
 
-## Quick start
+  #1: "feat: Add parser"
+    Author:  Night Owl <owl@example.com> → Ada Lovelace <ada@example.com>
+    Date:    2026-03-14T01:47:12.000Z → 2026-03-20T16:09:45.000Z
 
-Requires Node.js 24+ and git.
+  #2: "fix: Handle empty input"
+    Author:  Night Owl <owl@example.com> → Ada Lovelace <ada@example.com>
+    Date:    2026-03-14T02:31:05.000Z → 2026-03-20T17:00:00.000Z
+```
+
+## What it changes
+
+- Author and committer of every commit become one of your identities
+  (picked at random per commit when you give several). Committer date equals
+  author date.
+- Timestamps move into the work window on allowed days. Relative spacing is
+  kept: commits made in one sitting stay close, commits days apart stay days
+  apart. Seeded jitter keeps it from looking mechanical.
+- `Co-Authored-By` trailers from AI assistants (Claude, Copilot, ChatGPT,
+  Codex, Cursor, Gemini Code Assist, Windsurf, Codeium, Tabnine, Amazon Q,
+  `[bot]` accounts) are removed when the name or email identifies the tool.
+  Human co-authors stay.
+- Conventional commit subjects get their first letter capitalised
+  (`fix: typo` becomes `fix: Typo`).
+
+File contents are copied byte for byte. Commit messages stored in another
+encoding are converted to UTF-8.
+
+## Requirements
+
+Node.js 26+ and git.
+
+## Install
 
 ```bash
 npm install
+npm link    # puts `herodotus` on your PATH
 ```
 
-```bash
-# Generate a config file
-npm start -- init
+Without linking, run it as `npm start -- <args>`.
 
-# Run on the current repo (writes to herodotus/<branch>)
-npm start
+## Usage
 
-# Specify an identity
-npm start -- -i "Ada Lovelace:ada@example.com"
-
-# Preview changes without modifying anything
-npm start -- --dry-run
-
-# Rewrite in-place (creates a backup ref)
-npm start -- --in-place
+```
+herodotus [options] [<repo-path>]
+herodotus init [<repo-path>]
 ```
 
-## Configuration
+`<repo-path>` defaults to the current directory. `init` writes a
+`.herodotus.toml` prefilled with your git identity and refuses to overwrite an
+existing one.
 
-Drop a `.herodotus.toml` in your repo root:
+| Option                        | Default                         | Description                                         |
+| ----------------------------- | ------------------------------- | --------------------------------------------------- |
+| `-i, --identity <name:email>` | `git config user.name`/`.email` | Identity to use; repeat for several                 |
+| `-c, --config <file>`         | `.herodotus.toml`               | Config file, relative to `<repo-path>`              |
+| `-b, --branch <ref>`          | current branch                  | Branch or other ref to rewrite                      |
+| `--start <HH:MM>`             | `09:00`                         | Workday start                                       |
+| `--end <HH:MM>`               | `18:00`                         | Workday end                                         |
+| `--timezone <tz>`             | system timezone                 | IANA timezone for hours, days and offsets           |
+| `-d, --allowed-days <days>`   | `Mon,Tue,Wed,Thu,Fri,Sat`       | Comma-separated (`Mon` or `Monday`, any case)       |
+| `--start-date <date>`         |                                 | Place the first commit here and build forward       |
+| `--end-date <date>`           | now                             | Place the last commit here and build backward       |
+| `--in-place`                  | off                             | Rewrite the ref itself instead of a new branch      |
+| `--dry-run`                   | off                             | Print the changes without writing anything          |
+| `--seed <n>`                  | current time                    | Non-negative integer seed for reproducible output   |
+| `-h, --help`                  |                                 | Show help                                           |
+
+`--start-date` and `--end-date` are mutually exclusive. Dates are anything
+JavaScript's `Date` parses, e.g. `2026-01-05T09:00:00Z`. A date-time without
+`Z` or an offset is read in the machine's local timezone, not `--timezone`.
+
+With no `-i`, no `[[identity]]` in the config and no git `user.name` and
+`user.email`, the run fails.
+
+Errors go to stderr with exit code 1.
+
+### Config file
+
+CLI flags override the file field by field. As on the command line, a
+`startDate`/`endDate` without `Z` or an offset is in the machine's local
+timezone, not `timezone`.
 
 ```toml
 [[identity]]
-name = "Your Name"
-email = "you@example.com"
+name = "Ada Lovelace"
+email = "ada@example.com"
 
 [schedule]
 start = "09:00"
 end = "18:00"
 timezone = "Europe/Bucharest"
-allowedDays = ["Sat", "Sun"]
+allowedDays = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+# startDate = "2026-01-05T07:00:00Z"
+endDate = "2026-06-30T15:00:00Z"
 ```
 
-CLI flags override the config file. Without a config, Herodotus uses your
-`git config` identity and a 9-to-6 schedule.
+### Where the result goes
 
-## CLI reference
+By default the ref is left alone and the rewrite is written to a new local
+branch `herodotus/<ref>`; `-b origin/main` writes `herodotus/origin/main`. The
+run fails if that branch already exists.
 
-```
-herodotus [options] [<repo-path>]
+With `--in-place` the ref itself is rewritten, after its old value is saved to
+`refs/original/herodotus/<ref>`. This works on any ref, including
+remote-tracking ones: `--in-place -b origin/main` backs up and then rewrites
+`refs/remotes/origin/main`. An existing backup is never overwritten: the
+new one goes to `refs/original/herodotus/<ref>@<unix-ts>`, and the output names
+the ref used.
 
-  -i, --identity <name:email>   Identity to use (repeatable)
-  -c, --config <file>           Config file (default: .herodotus.toml)
-  -b, --branch <ref>            Branch to rewrite (default: HEAD)
-      --start <HH:MM>           Workday start (default: 09:00)
-      --end <HH:MM>             Workday end (default: 18:00)
-      --timezone <tz>           IANA timezone (default: system)
-  -d, --allowed-days <days>     Comma-separated days (default: Mon-Sat)
-      --start-date <date>       First commit at this date (build forward)
-      --end-date <date>         Last commit at this date (build backward, default: now)
-      --in-place                Rewrite branch in-place with backup
-      --dry-run                 Show changes without modifying
-      --seed <number>           PRNG seed for reproducible output
-  -h, --help                    Show help
-```
+Both modes refuse:
+
+- a dirty working tree (except with `--dry-run`)
+- revisions that are not refs (a commit hash, `HEAD~2`, a detached `HEAD`)
+- annotated tags
+- names that are both a branch and a tag; pass the full refname, e.g.
+  `-b refs/heads/release`
 
 ## How it works
 
-Herodotus pipes your branch through `git fast-export`, transforms the stream in
-memory, and writes it back with `git fast-import`. No shell-per-commit overhead,
-no Python dependency.
+The branch goes through `git fast-export --reencode=yes`, the stream is edited
+in memory, and the result is fed to `git fast-import`. No per-commit shell
+calls.
 
-File contents are copied byte for byte. Commit messages recorded in another
-encoding (an `encoding` header, e.g. from `i18n.commitEncoding=ISO-8859-1`) are
-converted to UTF-8 via `fast-export --reencode=yes`, so rewritten commits carry
-UTF-8 messages and no encoding header.
-
-**Timestamps** are redistributed to preserve relative commit density while
-snapping everything into your configured work window. A seeded PRNG adds subtle
-jitter so the result doesn't look mechanical.
-
-**Safety**: By default, Herodotus writes to a new local `herodotus/<branch>`
-branch, leaving your original history untouched. This holds for any ref you pass
-with `-b`, not only local branches: `-b origin/main` writes
-`herodotus/origin/main` and leaves `refs/remotes/origin/main` alone.
-
-In every mode, revisions that are not refs (a commit hash, `HEAD~2`, a detached
-`HEAD`) and annotated tags are refused; create a branch from them first. A name
-that is both a branch and a tag is refused as ambiguous; pass the full refname
-(e.g. `-b refs/heads/release`).
-
-Use `--in-place` to rewrite the given ref itself: the ref's original value is
-kept in `refs/original/herodotus/<branch>`. This applies to whatever ref you
-pass, so `--in-place -b origin/main` rewrites the remote-tracking ref
-`refs/remotes/origin/main` (backed up first). Backups are never
-overwritten; if that ref already exists (say, from an earlier in-place run), it
-is left as is and the backup goes to a timestamped
-`refs/original/herodotus/<branch>@<unix-ts>` instead. The output names the ref
-that holds the backup.
-
-## Install & test
+## Development
 
 ```bash
-npm link           # installs the `herodotus` command globally
-npm test           # run the test suite
-npm run typecheck  # type-check with tsc
+npm test           # node:test, test/*.test.ts
+npm run typecheck  # tsc
 ```
