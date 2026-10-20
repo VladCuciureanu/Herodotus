@@ -1,18 +1,16 @@
 import { spawn, spawnSync } from "node:child_process";
-import type { CommitInfo, HerodotusConfig, Identity } from "./types.ts";
 import { stripAiCoAuthors } from "./ai-authors.ts";
 import { capitalizeConventionalCommit } from "./commit-message.ts";
 import { createIdentityPicker } from "./identity.ts";
 import { redistributeTimestamps } from "./timeline.ts";
+import type { CommitInfo, HerodotusConfig, Identity } from "./types.ts";
 import { createBackupRef, resolveRewriteTarget } from "./utils.ts";
 
-const LF = 0x0A; // '\n'
+const LF = 0x0a; // '\n'
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function parseAuthorLine(
-  line: string,
-): { prefix: string; identity: Identity; timestamp: string } {
+function parseAuthorLine(line: string): { prefix: string; identity: Identity; timestamp: string } {
   const match = line.match(/^(author|committer)\s+(.+?)\s+<([^>]+)>\s+(.+)$/);
   if (!match) throw new Error(`Cannot parse author/committer line: ${line}`);
   return {
@@ -22,16 +20,12 @@ function parseAuthorLine(
   };
 }
 
-function formatAuthorLine(
-  prefix: string,
-  identity: Identity,
-  timestamp: string,
-): string {
+function formatAuthorLine(prefix: string, identity: Identity, timestamp: string): string {
   return `${prefix} ${identity.name} <${identity.email}> ${timestamp}`;
 }
 
 function parseTimestamp(ts: string): number {
-  return parseInt(ts.split(" ")[0]);
+  return parseInt(ts.split(" ")[0], 10);
 }
 
 function formatTimestamp(epoch: number, tzOffset: string): string {
@@ -45,8 +39,7 @@ function getTzOffset(epoch: number, tz: string): string {
     timeZoneName: "shortOffset",
   });
   const parts = formatter.formatToParts(date);
-  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ??
-    "+00:00";
+  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "+00:00";
 
   if (tzPart === "GMT") return "+0000";
   const m = tzPart.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
@@ -70,10 +63,7 @@ function findLF(buf: Uint8Array, start: number): number {
 /**
  * Read one line from buf starting at offset. Returns the line (without LF) and the next offset.
  */
-function readLine(
-  buf: Uint8Array,
-  offset: number,
-): { line: string; next: number } {
+function readLine(buf: Uint8Array, offset: number): { line: string; next: number } {
   const lfPos = findLF(buf, offset);
   if (lfPos === -1) {
     return { line: decoder.decode(buf.subarray(offset)), next: buf.length };
@@ -151,7 +141,7 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
       let message = "";
       if (startsWith(buf, offset, "data ")) {
         const { line, next } = readLine(buf, offset);
-        const dataLength = parseInt(line.split(" ")[1]);
+        const dataLength = parseInt(line.split(" ")[1], 10);
         offset = next;
 
         // Read exactly dataLength bytes as the message (commit messages are text)
@@ -211,7 +201,7 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
       // Read data section
       if (startsWith(buf, offset, "data ")) {
         const { line, next } = readLine(buf, offset);
-        const blobSize = parseInt(line.split(" ")[1]);
+        const blobSize = parseInt(line.split(" ")[1], 10);
         offset = next + blobSize;
         // Skip trailing LF
         if (offset < buf.length && buf[offset] === LF) {
@@ -247,9 +237,7 @@ function rebuildFastExport(
 
   const renameCommand = (line: string, command: string): string => {
     if (!refRename) return line;
-    return line === `${command} ${refRename.from}`
-      ? `${command} ${refRename.to}`
-      : line;
+    return line === `${command} ${refRename.from}` ? `${command} ${refRename.to}` : line;
   };
 
   // Copy buf[lastEnd, until) unchanged, except for renamed reset lines.
@@ -259,7 +247,7 @@ function rebuildFastExport(
       const renamed = renameCommand(reset.line, "reset");
       if (renamed === reset.line) continue;
       chunks.push(buf.subarray(lastEnd, reset.start));
-      chunks.push(encoder.encode(renamed + "\n"));
+      chunks.push(encoder.encode(`${renamed}\n`));
       lastEnd = reset.end;
     }
     chunks.push(buf.subarray(lastEnd, until));
@@ -279,7 +267,7 @@ function rebuildFastExport(
       if (line.startsWith("commit ")) return renameCommand(line, "commit");
       return line;
     });
-    chunks.push(encoder.encode(headerLines.join("\n") + "\n"));
+    chunks.push(encoder.encode(`${headerLines.join("\n")}\n`));
 
     // Write new data section with modified message
     const msgBytes = encoder.encode(mod.message);
@@ -329,20 +317,14 @@ export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
   // Export (keep as raw bytes). --reencode=yes converts commit messages with a
   // non-UTF-8 "encoding" header to UTF-8 (fast-export aborts on them by
   // default); blob contents are never re-encoded.
-  const fullExportProc = spawnSync("git", [
-    "fast-export",
-    "--reencode=yes",
-    source,
-  ], {
+  const fullExportProc = spawnSync("git", ["fast-export", "--reencode=yes", source], {
     cwd: repoPath,
     maxBuffer: Infinity,
   });
 
   if (fullExportProc.error) throw fullExportProc.error;
   if (fullExportProc.status !== 0) {
-    throw new Error(
-      `git fast-export failed: ${decoder.decode(fullExportProc.stderr)}`,
-    );
+    throw new Error(`git fast-export failed: ${decoder.decode(fullExportProc.stderr)}`);
   }
 
   const rawExport: Uint8Array = fullExportProc.stdout;
@@ -357,12 +339,7 @@ export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
   const changeCounts = commits.map((c) => c.changeCount);
 
   // Redistribute timestamps
-  const newTimestamps = redistributeTimestamps(
-    originalTimestamps,
-    schedule,
-    seed,
-    changeCounts,
-  );
+  const newTimestamps = redistributeTimestamps(originalTimestamps, schedule, seed, changeCounts);
 
   // Create identity picker
   const pickIdentity = createIdentityPicker(config.identities, seed);

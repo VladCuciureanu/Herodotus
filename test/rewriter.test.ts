@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { rewrite } from "../src/rewriter.ts";
 import type { HerodotusConfig } from "../src/types.ts";
 
@@ -28,33 +28,42 @@ function createTestRepo(): string {
 
   writeFile(join(dir, "file1.txt"), "file1\n");
   git(["add", "file1.txt"], dir);
-  git([
-    "commit",
-    "-m",
-    "Initial commit\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
-    "--date",
-    "2024-01-08T03:00:00+0000",
-  ], dir);
+  git(
+    [
+      "commit",
+      "-m",
+      "Initial commit\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+      "--date",
+      "2024-01-08T03:00:00+0000",
+    ],
+    dir,
+  );
 
   writeFile(join(dir, "file2.txt"), "file2\n");
   git(["add", "file2.txt"], dir);
-  git([
-    "commit",
-    "-m",
-    "Add feature\n\nCo-Authored-By: Alice <alice@example.com>",
-    "--date",
-    "2024-01-08T04:00:00+0000",
-  ], dir);
+  git(
+    [
+      "commit",
+      "-m",
+      "Add feature\n\nCo-Authored-By: Alice <alice@example.com>",
+      "--date",
+      "2024-01-08T04:00:00+0000",
+    ],
+    dir,
+  );
 
   writeFile(join(dir, "file3.txt"), "file3\n");
   git(["add", "file3.txt"], dir);
-  git([
-    "commit",
-    "-m",
-    "Fix bug\n\nCo-Authored-By: GitHub Copilot <noreply@github.com>",
-    "--date",
-    "2024-01-09T02:30:00+0000",
-  ], dir);
+  git(
+    [
+      "commit",
+      "-m",
+      "Fix bug\n\nCo-Authored-By: GitHub Copilot <noreply@github.com>",
+      "--date",
+      "2024-01-09T02:30:00+0000",
+    ],
+    dir,
+  );
 
   return dir;
 }
@@ -78,9 +87,7 @@ const BINARY = Buffer.concat([
 describe("rewriter", () => {
   let repoDir: string;
 
-  function makeConfig(
-    overrides: Partial<HerodotusConfig> = {},
-  ): HerodotusConfig {
+  function makeConfig(overrides: Partial<HerodotusConfig> = {}): HerodotusConfig {
     return {
       identities: [{ name: "New Author", email: "new@example.com" }],
       schedule,
@@ -116,10 +123,7 @@ describe("rewriter", () => {
     const branches = git(["branch"], repoDir);
     assert.ok(branches.includes("herodotus/main"));
 
-    const author = git(
-      ["log", "--format=%an <%ae>", "herodotus/main"],
-      repoDir,
-    );
+    const author = git(["log", "--format=%an <%ae>", "herodotus/main"], repoDir);
     const lines = author.split("\n");
     for (const line of lines) {
       assert.equal(line, "New Author <new@example.com>");
@@ -151,13 +155,7 @@ describe("rewriter", () => {
     const binary = Buffer.from([0xff, 0xfe, 0x00, 0x80, 0xc3, 0x28, 0x0a]);
     writeFileSync(join(repoDir, "blob.bin"), binary);
     git(["add", "blob.bin"], repoDir);
-    git([
-      "commit",
-      "-m",
-      "Add binary",
-      "--date",
-      "2024-01-09T03:00:00+0000",
-    ], repoDir);
+    git(["commit", "-m", "Add binary", "--date", "2024-01-09T03:00:00+0000"], repoDir);
     const originalHead = git(["rev-parse", "main"], repoDir);
 
     await rewrite(makeConfig());
@@ -207,6 +205,7 @@ describe("rewriter", () => {
     assert.equal(refs.length, 2);
     const extra = refs.find((r) => !r.startsWith(`${backup} `));
     assert.match(extra ?? "", /^refs\/original\/herodotus\/main@\d+ /);
+    // biome-ignore lint/style/noNonNullAssertion: asserted to match just above
     const [extraRef, extraSha] = extra!.split(" ");
     assert.equal(extraSha, firstRewrite);
     assert.equal(second.backupRef, extraRef);
@@ -263,15 +262,18 @@ describe("rewriter", () => {
     const msgFile = join(repoDir, "..", `${repoDir.split(/[\\/]/).pop()}.msg`);
     writeFileSync(msgFile, Buffer.from("Caf\xe9 latin\n", "latin1"));
     try {
-      git([
-        "-c",
-        "i18n.commitEncoding=ISO-8859-1",
-        "commit",
-        "-F",
-        msgFile,
-        "--date",
-        "2024-01-09T03:00:00+0000",
-      ], repoDir);
+      git(
+        [
+          "-c",
+          "i18n.commitEncoding=ISO-8859-1",
+          "commit",
+          "-F",
+          msgFile,
+          "--date",
+          "2024-01-09T03:00:00+0000",
+        ],
+        repoDir,
+      );
     } finally {
       rmSync(msgFile, { force: true });
     }
@@ -284,8 +286,7 @@ describe("rewriter", () => {
     await rewrite(makeConfig());
 
     const rewritten = Buffer.from(
-      spawnSync("git", ["cat-file", "commit", "herodotus/main"], { cwd: repoDir })
-        .stdout,
+      spawnSync("git", ["cat-file", "commit", "herodotus/main"], { cwd: repoDir }).stdout,
     );
     assert.ok(!rewritten.includes("encoding "), rewritten.toString("latin1"));
     assert.ok(rewritten.includes(Buffer.from("\n\nCafé latin", "utf8")));
@@ -293,7 +294,10 @@ describe("rewriter", () => {
       git(["rev-parse", "herodotus/main^{tree}"], repoDir),
       git(["rev-parse", "main^{tree}"], repoDir),
     );
-    for (const [path, bytes] of [["latin1.txt", latin1], ["blob.bin", BINARY]] as const) {
+    for (const [path, bytes] of [
+      ["latin1.txt", latin1],
+      ["blob.bin", BINARY],
+    ] as const) {
       const blob = spawnSync("git", ["cat-file", "blob", `herodotus/main:${path}`], {
         cwd: repoDir,
       });
@@ -307,10 +311,7 @@ describe("rewriter", () => {
 
     await rewrite(makeConfig({ branch: "origin/main" }));
 
-    assert.equal(
-      git(["rev-parse", "refs/remotes/origin/main"], repoDir),
-      originalHead,
-    );
+    assert.equal(git(["rev-parse", "refs/remotes/origin/main"], repoDir), originalHead);
     assert.equal(git(["rev-parse", "main"], repoDir), originalHead);
     const target = "refs/heads/herodotus/origin/main";
     assert.notEqual(git(["rev-parse", target], repoDir), originalHead);
@@ -331,9 +332,11 @@ describe("rewriter", () => {
   });
 
   it("uses local work hours and offsets of a non-UTC timezone", async () => {
-    await rewrite(makeConfig({
-      schedule: { ...schedule, timezone: "Asia/Kolkata" },
-    }));
+    await rewrite(
+      makeConfig({
+        schedule: { ...schedule, timezone: "Asia/Kolkata" },
+      }),
+    );
 
     // %ai prints each date in its own recorded offset: "YYYY-MM-DD HH:MM:SS +0530"
     const dates = git(["log", "--format=%ai", "herodotus/main"], repoDir);
@@ -364,18 +367,22 @@ describe("herodotus CLI end to end", () => {
 
   it("writes herodotus/<branch> with binary blobs intact by default", () => {
     const originalHead = git(["rev-parse", "main"], repoDir);
-    const result = spawnSync(process.execPath, [
-      mainScript,
-      "-i",
-      "Ada Lovelace:ada@example.com",
-      "--timezone",
-      "UTC",
-      "--start-date",
-      "2024-01-08T09:00:00Z",
-      "--seed",
-      "7",
-      repoDir,
-    ], { encoding: "utf8" });
+    const result = spawnSync(
+      process.execPath,
+      [
+        mainScript,
+        "-i",
+        "Ada Lovelace:ada@example.com",
+        "--timezone",
+        "UTC",
+        "--start-date",
+        "2024-01-08T09:00:00Z",
+        "--seed",
+        "7",
+        repoDir,
+      ],
+      { encoding: "utf8" },
+    );
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Rewrote 4 commit\(s\)/);
 
@@ -397,15 +404,11 @@ describe("herodotus CLI end to end", () => {
   it("reports a new timestamped backup ref on a second --in-place run", () => {
     const originalHead = git(["rev-parse", "main"], repoDir);
     const run = () =>
-      spawnSync(process.execPath, [
-        mainScript,
-        "-i",
-        "Ada Lovelace:ada@example.com",
-        "--in-place",
-        "--seed",
-        "7",
-        repoDir,
-      ], { encoding: "utf8" });
+      spawnSync(
+        process.execPath,
+        [mainScript, "-i", "Ada Lovelace:ada@example.com", "--in-place", "--seed", "7", repoDir],
+        { encoding: "utf8" },
+      );
 
     const first = run();
     assert.equal(first.status, 0, first.stderr);
@@ -414,36 +417,32 @@ describe("herodotus CLI end to end", () => {
 
     const second = run();
     assert.equal(second.status, 0, second.stderr);
-    const m = second.stdout.match(
-      /stored at: (refs\/original\/herodotus\/main@\d+)\n/,
-    );
+    const m = second.stdout.match(/stored at: (refs\/original\/herodotus\/main@\d+)\n/);
     assert.ok(m, second.stdout);
     assert.equal(git(["rev-parse", m[1]], repoDir), firstRewrite);
-    assert.equal(
-      git(["rev-parse", "refs/original/herodotus/main"], repoDir),
-      originalHead,
-    );
+    assert.equal(git(["rev-parse", "refs/original/herodotus/main"], repoDir), originalHead);
   });
 
   it("writes -b origin/main to herodotus/origin/main, leaving the remote ref", () => {
     const originalHead = git(["rev-parse", "main"], repoDir);
     git(["update-ref", "refs/remotes/origin/main", originalHead], repoDir);
-    const result = spawnSync(process.execPath, [
-      mainScript,
-      "-i",
-      "Ada Lovelace:ada@example.com",
-      "-b",
-      "origin/main",
-      "--seed",
-      "7",
-      repoDir,
-    ], { encoding: "utf8" });
+    const result = spawnSync(
+      process.execPath,
+      [
+        mainScript,
+        "-i",
+        "Ada Lovelace:ada@example.com",
+        "-b",
+        "origin/main",
+        "--seed",
+        "7",
+        repoDir,
+      ],
+      { encoding: "utf8" },
+    );
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /new branch herodotus\/origin\/main/);
-    assert.equal(
-      git(["rev-parse", "refs/remotes/origin/main"], repoDir),
-      originalHead,
-    );
+    assert.equal(git(["rev-parse", "refs/remotes/origin/main"], repoDir), originalHead);
     assert.equal(
       git(["rev-parse", "refs/heads/herodotus/origin/main^{tree}"], repoDir),
       git(["rev-parse", "main^{tree}"], repoDir),

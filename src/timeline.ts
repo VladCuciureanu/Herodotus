@@ -1,9 +1,18 @@
-import type { ScheduleConfig } from "./types.ts";
 import { gaussianRandom, seededRandom } from "./random.ts";
+import type { ScheduleConfig } from "./types.ts";
 
 const MIN_GAP_MS = 2 * 60 * 1000; // 2 minutes
 const MAX_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours
 const BASE_MS_PER_CHANGE = 3 * 60 * 1000; // 3 minutes per file change
+
+/**
+ * Return the value of one part from Intl.DateTimeFormat#formatToParts.
+ */
+function getPart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): string {
+  const part = parts.find((p) => p.type === type);
+  if (!part) throw new Error(`Missing "${type}" in formatted date`);
+  return part.value;
+}
 
 /**
  * Given a Date, return the local time-of-day in minutes within the given timezone.
@@ -16,8 +25,8 @@ function getMinutesInTz(date: Date, tz: string): number {
     hour12: false,
   }).formatToParts(date);
 
-  const hour = parseInt(parts.find((p) => p.type === "hour")!.value);
-  const minute = parseInt(parts.find((p) => p.type === "minute")!.value);
+  const hour = parseInt(getPart(parts, "hour"), 10);
+  const minute = parseInt(getPart(parts, "minute"), 10);
   return hour * 60 + minute;
 }
 
@@ -30,7 +39,7 @@ function getDayOfWeekInTz(date: Date, tz: string): number {
     weekday: "short",
   }).formatToParts(date);
 
-  const day = parts.find((p) => p.type === "weekday")!.value;
+  const day = getPart(parts, "weekday");
   const map: Record<string, number> = {
     Sun: 0,
     Mon: 1,
@@ -78,9 +87,7 @@ function advanceToWorkSlot(date: Date, schedule: ScheduleConfig): Date {
     // Jump to next day at work start time
     const mins = getMinutesInTz(d, schedule.timezone);
     const minsUntilMidnight = 24 * 60 - mins;
-    d = new Date(
-      d.getTime() + (minsUntilMidnight + schedule.start) * 60 * 1000,
-    );
+    d = new Date(d.getTime() + (minsUntilMidnight + schedule.start) * 60 * 1000);
   }
 
   // Fallback: return as-is (shouldn't happen with valid config)
@@ -115,30 +122,6 @@ function retreatToWorkSlot(date: Date, schedule: ScheduleConfig): Date {
   }
 
   return d;
-}
-
-/**
- * Snap a Date to the start of the work day if it's before work hours,
- * or to the next work day start if it's after.
- */
-function snapToWorkStart(date: Date, schedule: ScheduleConfig): Date {
-  const mins = getMinutesInTz(date, schedule.timezone);
-
-  if (mins < schedule.start) {
-    // Before work: jump to start time
-    const diff = (schedule.start - mins) * 60 * 1000;
-    return new Date(date.getTime() + diff);
-  }
-
-  if (mins >= schedule.end) {
-    // After work: jump to next day's start
-    const minsUntilMidnight = (24 * 60 - mins) * 60 * 1000;
-    const nextDay = new Date(date.getTime() + minsUntilMidnight);
-    const diff = schedule.start * 60 * 1000;
-    return new Date(nextDay.getTime() + diff);
-  }
-
-  return date;
 }
 
 /**
@@ -232,9 +215,10 @@ export function redistributeTimestamps(
 ): number[] {
   if (timestamps.length === 0) return [];
   if (timestamps.length === 1) {
-    const d = schedule.anchor.type === "start"
-      ? advanceToWorkSlot(schedule.anchor.date, schedule)
-      : retreatToWorkSlot(schedule.anchor.date, schedule);
+    const d =
+      schedule.anchor.type === "start"
+        ? advanceToWorkSlot(schedule.anchor.date, schedule)
+        : retreatToWorkSlot(schedule.anchor.date, schedule);
     return [Math.floor(d.getTime() / 1000)];
   }
 

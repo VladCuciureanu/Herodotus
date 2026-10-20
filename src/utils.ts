@@ -53,11 +53,10 @@ export interface RewriteTarget {
  * tagger and signature).
  */
 export function resolveSourceRef(repoPath: string, branch: string): string {
-  const result = spawnSync(
-    "git",
-    ["rev-parse", "--symbolic-full-name", branch],
-    { cwd: repoPath, encoding: "utf8" },
-  );
+  const result = spawnSync("git", ["rev-parse", "--symbolic-full-name", branch], {
+    cwd: repoPath,
+    encoding: "utf8",
+  });
   if (result.error) throw result.error;
   if (/ambiguous/i.test(result.stderr)) {
     const refs = run(["git", "show-ref", "--", branch], repoPath)
@@ -90,10 +89,7 @@ export function resolveSourceRef(repoPath: string, branch: string): string {
  * branch it is written to, so the source ref is never overwritten whatever
  * its namespace (refs/heads, refs/remotes, refs/tags, ...).
  */
-export function resolveRewriteTarget(
-  repoPath: string,
-  branch: string,
-): RewriteTarget {
+export function resolveRewriteTarget(repoPath: string, branch: string): RewriteTarget {
   const source = resolveSourceRef(repoPath, branch);
   // Strip the namespace by hand: `rev-parse --abbrev-ref` would keep a
   // "heads/" prefix for a name that also exists as a tag.
@@ -108,11 +104,7 @@ export function resolveRewriteTarget(
  * a timestamped `<backupRef>@<unix-ts>` is written instead. Returns the ref
  * that holds the backup.
  */
-export function createBackupRef(
-  repoPath: string,
-  sourceRef: string,
-  backupRef: string,
-): string {
+export function createBackupRef(repoPath: string, sourceRef: string, backupRef: string): string {
   const sha = run(["git", "rev-parse", "--verify", sourceRef], repoPath);
   const ts = Math.floor(Date.now() / 1000);
   const candidates = [backupRef, `${backupRef}@${ts}`];

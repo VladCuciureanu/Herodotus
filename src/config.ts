@@ -1,15 +1,15 @@
-import { parse as parseToml } from "smol-toml";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { parse as parseToml } from "smol-toml";
 import type { HerodotusConfig, ScheduleConfig } from "./types.ts";
 import { getCurrentBranch, getDefaultIdentity } from "./utils.ts";
 
 export function parseTime(s: string): number {
   const match = s.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) throw new Error(`Invalid time format: "${s}". Expected "HH:MM"`);
-  const h = parseInt(match[1]);
-  const m = parseInt(match[2]);
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
   if (h > 23 || m > 59) {
     throw new Error(`Invalid time: "${s}". Hours must be 0-23, minutes 0-59`);
   }
@@ -35,25 +35,20 @@ const DAY_MAP: Record<string, number> = {
 
 export const DEFAULT_ALLOWED_DAYS = [1, 2, 3, 4, 5, 6]; // Mon-Sat
 
-export function parseAnchor(
-  startDate?: string,
-  endDate?: string,
-): ScheduleConfig["anchor"] {
+export function parseAnchor(startDate?: string, endDate?: string): ScheduleConfig["anchor"] {
   if (startDate && endDate) {
-    throw new Error(
-      "Cannot specify both --start-date and --end-date. Choose one.",
-    );
+    throw new Error("Cannot specify both --start-date and --end-date. Choose one.");
   }
   if (startDate) {
     const d = new Date(startDate);
-    if (isNaN(d.getTime())) {
+    if (Number.isNaN(d.getTime())) {
       throw new Error(`Invalid start date: "${startDate}"`);
     }
     return { type: "start", date: d };
   }
   if (endDate) {
     const d = new Date(endDate);
-    if (isNaN(d.getTime())) throw new Error(`Invalid end date: "${endDate}"`);
+    if (Number.isNaN(d.getTime())) throw new Error(`Invalid end date: "${endDate}"`);
     return { type: "end", date: d };
   }
   return { type: "end", date: new Date() };
@@ -149,8 +144,7 @@ export function buildConfig(
   fileConfig: ConfigOverrides,
   repoPath: string,
 ): HerodotusConfig {
-  const identities = cliArgs.identities ??
-    fileConfig.identities ?? [getDefaultIdentity(repoPath)];
+  const identities = cliArgs.identities ?? fileConfig.identities ?? [getDefaultIdentity(repoPath)];
 
   // Each source only carries the fields it set, so later sources override
   // earlier ones field by field.
@@ -160,8 +154,7 @@ export function buildConfig(
     ...cliArgs.schedule,
   };
 
-  const branch = cliArgs.branch ?? fileConfig.branch ??
-    getCurrentBranch(repoPath);
+  const branch = cliArgs.branch ?? fileConfig.branch ?? getCurrentBranch(repoPath);
 
   return {
     identities,
