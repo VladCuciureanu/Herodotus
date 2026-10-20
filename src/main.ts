@@ -2,7 +2,11 @@
 import { parseCli, printUsage } from "./cli.ts";
 import { runInit } from "./init.ts";
 import { rewrite } from "./rewriter.ts";
-import { branchExists, isWorkingTreeClean } from "./utils.ts";
+import {
+  branchExists,
+  isWorkingTreeClean,
+  resolveRewriteTarget,
+} from "./utils.ts";
 import { resolve } from "node:path";
 import process from "node:process";
 
@@ -34,12 +38,13 @@ async function main() {
     process.exit(1);
   }
 
-  if (
-    !config.inPlace &&
-    branchExists(config.repoPath, `herodotus/${config.branch}`)
-  ) {
+  // Refuses non-refs, ambiguous names and annotated tags in both modes.
+  // Default mode writes to a new local branch and never touches the source ref.
+  const { target } = resolveRewriteTarget(config.repoPath, config.branch);
+  const targetName = target.replace(/^refs\/heads\//, "");
+  if (!config.inPlace && branchExists(config.repoPath, target)) {
     console.error(
-      `Error: branch "herodotus/${config.branch}" already exists. Delete it first or use --in-place.`,
+      `Error: branch "${targetName}" already exists. Delete it first or use --in-place.`,
     );
     process.exit(1);
   }
@@ -61,12 +66,12 @@ async function main() {
   );
   console.log(
     `  Mode: ${
-      config.inPlace ? "in-place" : `new branch herodotus/${config.branch}`
+      config.inPlace ? "in-place" : `new branch ${targetName}`
     }`,
   );
   console.log();
 
-  const changes = await rewrite(config);
+  const { changes, backupRef } = await rewrite(config);
 
   if (config.dryRun) {
     console.log("Changes that would be applied:\n");
@@ -86,8 +91,13 @@ async function main() {
     }
   } else {
     console.log(`Rewrote ${changes.length} commit(s).`);
-    if (config.inPlace && config.backup) {
-      console.log(`Backup stored at: ${config.backup}`);
+    if (backupRef) {
+      console.log(`Backup of the original ${config.branch} stored at: ${backupRef}`);
+      if (backupRef !== config.backup) {
+        console.log(
+          `  (${config.backup} already held an earlier backup and was left unchanged)`,
+        );
+      }
     }
   }
 }

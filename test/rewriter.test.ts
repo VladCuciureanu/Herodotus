@@ -103,7 +103,7 @@ describe("rewriter", () => {
   });
 
   it("dry run reports changes without modifying repo", async () => {
-    const changes = await rewrite(makeConfig({ dryRun: true }));
+    const { changes } = await rewrite(makeConfig({ dryRun: true }));
     assert.equal(changes.length, 3);
     const log = git(["log", "--oneline"], repoDir);
     assert.ok(log.includes("Fix bug"));
@@ -191,6 +191,145 @@ describe("rewriter", () => {
     assert.equal(git(["status", "--porcelain"], repoDir), "");
   });
 
+  it("keeps the first backup when rewriting in place twice", async () => {
+    const originalHead = git(["rev-parse", "main"], repoDir);
+    const backup = "refs/original/herodotus/main";
+
+    await rewrite(makeConfig({ inPlace: true, backup }));
+    const firstRewrite = git(["rev-parse", "main"], repoDir);
+    const second = await rewrite(makeConfig({ inPlace: true, backup, seed: 7 }));
+
+    assert.equal(git(["rev-parse", backup], repoDir), originalHead);
+    const refs = git(
+      ["for-each-ref", "--format=%(refname) %(objectname)", "refs/original/"],
+      repoDir,
+    ).split("\n");
+    assert.equal(refs.length, 2);
+    const extra = refs.find((r) => !r.startsWith(`${backup} `));
+    assert.match(extra ?? "", /^refs\/original\/herodotus\/main@\d+ /);
+    const [extraRef, extraSha] = extra!.split(" ");
+    assert.equal(extraSha, firstRewrite);
+    assert.equal(second.backupRef, extraRef);
+  });
+
+  it("refuses an annotated tag in in-place mode and keeps the tag object", async () => {
+    git(["tag", "-a", "v1", "-m", "release"], repoDir);
+    const tagObject = git(["rev-parse", "refs/tags/v1"], repoDir);
+    const backup = "refs/original/herodotus/v1";
+
+    await assert.rejects(
+      rewrite(makeConfig({ branch: "v1", inPlace: true, backup })),
+      /annotated tag/,
+    );
+
+    assert.equal(git(["rev-parse", "refs/tags/v1"], repoDir), tagObject);
+    assert.equal(git(["cat-file", "-t", "refs/tags/v1"], repoDir), "tag");
+    assert.equal(git(["for-each-ref", "refs/original/"], repoDir), "");
+  });
+
+  it("refuses non-ref revisions in in-place mode", async () => {
+    const head = git(["rev-parse", "main"], repoDir);
+    await assert.rejects(
+      rewrite(makeConfig({ branch: head, inPlace: true, backup: false })),
+      /does not name a branch or other ref/,
+    );
+    git(["checkout", "-q", "--detach"], repoDir);
+    await assert.rejects(
+      rewrite(makeConfig({ branch: "HEAD", inPlace: true, backup: false })),
+      /does not name a branch or other ref/,
+    );
+    assert.equal(git(["rev-parse", "main"], repoDir), head);
+  });
+
+  it("calls a name that is both a tag and a branch ambiguous", async () => {
+    git(["branch", "dup"], repoDir);
+    git(["tag", "dup"], repoDir);
+    for (const inPlace of [false, true]) {
+      await assert.rejects(
+        rewrite(makeConfig({ branch: "dup", inPlace })),
+        /ambiguous.*refs\/heads\/dup/s,
+      );
+    }
+    await rewrite(makeConfig({ branch: "refs/heads/dup" }));
+    assert.ok(git(["rev-parse", "--verify", "refs/heads/herodotus/dup"], repoDir));
+  });
+
+  it("re-encodes non-UTF-8 commit messages and keeps blobs byte-exact", async (t) => {
+    // Latin-1 bytes in both the message and a file: only the message may change.
+    const latin1 = Buffer.from([0x43, 0x61, 0x66, 0xe9, 0x20, 0xff, 0x0a]); // "Café ÿ\n"
+    writeFileSync(join(repoDir, "latin1.txt"), latin1);
+    writeFileSync(join(repoDir, "blob.bin"), BINARY);
+    git(["add", "latin1.txt", "blob.bin"], repoDir);
+    const msgFile = join(repoDir, "..", `${repoDir.split(/[\\/]/).pop()}.msg`);
+    writeFileSync(msgFile, Buffer.from("Caf\xe9 latin\n", "latin1"));
+    try {
+      git([
+        "-c",
+        "i18n.commitEncoding=ISO-8859-1",
+        "commit",
+        "-F",
+        msgFile,
+        "--date",
+        "2024-01-09T03:00:00+0000",
+      ], repoDir);
+    } finally {
+      rmSync(msgFile, { force: true });
+    }
+    const raw = spawnSync("git", ["cat-file", "commit", "main"], { cwd: repoDir });
+    if (!/^encoding ISO-8859-1$/m.test(Buffer.from(raw.stdout).toString("latin1"))) {
+      t.skip("local git did not record an ISO-8859-1 encoding header");
+      return;
+    }
+
+    await rewrite(makeConfig());
+
+    const rewritten = Buffer.from(
+      spawnSync("git", ["cat-file", "commit", "herodotus/main"], { cwd: repoDir })
+        .stdout,
+    );
+    assert.ok(!rewritten.includes("encoding "), rewritten.toString("latin1"));
+    assert.ok(rewritten.includes(Buffer.from("\n\nCafé latin", "utf8")));
+    assert.equal(
+      git(["rev-parse", "herodotus/main^{tree}"], repoDir),
+      git(["rev-parse", "main^{tree}"], repoDir),
+    );
+    for (const [path, bytes] of [["latin1.txt", latin1], ["blob.bin", BINARY]] as const) {
+      const blob = spawnSync("git", ["cat-file", "blob", `herodotus/main:${path}`], {
+        cwd: repoDir,
+      });
+      assert.ok(Buffer.from(blob.stdout).equals(bytes), path);
+    }
+  });
+
+  it("never overwrites a non-branch source ref in default mode", async () => {
+    const originalHead = git(["rev-parse", "main"], repoDir);
+    git(["update-ref", "refs/remotes/origin/main", originalHead], repoDir);
+
+    await rewrite(makeConfig({ branch: "origin/main" }));
+
+    assert.equal(
+      git(["rev-parse", "refs/remotes/origin/main"], repoDir),
+      originalHead,
+    );
+    assert.equal(git(["rev-parse", "main"], repoDir), originalHead);
+    const target = "refs/heads/herodotus/origin/main";
+    assert.notEqual(git(["rev-parse", target], repoDir), originalHead);
+    assert.equal(git(["rev-list", "--count", target], repoDir), "3");
+    const authors = git(["log", "--format=%an <%ae>", target], repoDir);
+    for (const line of authors.split("\n")) {
+      assert.equal(line, "New Author <new@example.com>");
+    }
+  });
+
+  it("refuses an annotated tag in default mode", async () => {
+    git(["tag", "-a", "v1", "-m", "release"], repoDir);
+    const tagObject = git(["rev-parse", "refs/tags/v1"], repoDir);
+
+    await assert.rejects(rewrite(makeConfig({ branch: "v1" })), /annotated tag/);
+
+    assert.equal(git(["rev-parse", "refs/tags/v1"], repoDir), tagObject);
+  });
+
   it("uses local work hours and offsets of a non-UTC timezone", async () => {
     await rewrite(makeConfig({
       schedule: { ...schedule, timezone: "Asia/Kolkata" },
@@ -253,5 +392,61 @@ describe("herodotus CLI end to end", () => {
     for (const line of authors.split("\n")) {
       assert.equal(line, "Ada Lovelace <ada@example.com>");
     }
+  });
+
+  it("reports a new timestamped backup ref on a second --in-place run", () => {
+    const originalHead = git(["rev-parse", "main"], repoDir);
+    const run = () =>
+      spawnSync(process.execPath, [
+        mainScript,
+        "-i",
+        "Ada Lovelace:ada@example.com",
+        "--in-place",
+        "--seed",
+        "7",
+        repoDir,
+      ], { encoding: "utf8" });
+
+    const first = run();
+    assert.equal(first.status, 0, first.stderr);
+    assert.match(first.stdout, /stored at: refs\/original\/herodotus\/main\n/);
+    const firstRewrite = git(["rev-parse", "main"], repoDir);
+
+    const second = run();
+    assert.equal(second.status, 0, second.stderr);
+    const m = second.stdout.match(
+      /stored at: (refs\/original\/herodotus\/main@\d+)\n/,
+    );
+    assert.ok(m, second.stdout);
+    assert.equal(git(["rev-parse", m[1]], repoDir), firstRewrite);
+    assert.equal(
+      git(["rev-parse", "refs/original/herodotus/main"], repoDir),
+      originalHead,
+    );
+  });
+
+  it("writes -b origin/main to herodotus/origin/main, leaving the remote ref", () => {
+    const originalHead = git(["rev-parse", "main"], repoDir);
+    git(["update-ref", "refs/remotes/origin/main", originalHead], repoDir);
+    const result = spawnSync(process.execPath, [
+      mainScript,
+      "-i",
+      "Ada Lovelace:ada@example.com",
+      "-b",
+      "origin/main",
+      "--seed",
+      "7",
+      repoDir,
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /new branch herodotus\/origin\/main/);
+    assert.equal(
+      git(["rev-parse", "refs/remotes/origin/main"], repoDir),
+      originalHead,
+    );
+    assert.equal(
+      git(["rev-parse", "refs/heads/herodotus/origin/main^{tree}"], repoDir),
+      git(["rev-parse", "main^{tree}"], repoDir),
+    );
   });
 });

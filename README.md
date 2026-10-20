@@ -86,13 +86,33 @@ Herodotus pipes your branch through `git fast-export`, transforms the stream in
 memory, and writes it back with `git fast-import`. No shell-per-commit overhead,
 no Python dependency.
 
+File contents are copied byte for byte. Commit messages recorded in another
+encoding (an `encoding` header, e.g. from `i18n.commitEncoding=ISO-8859-1`) are
+converted to UTF-8 via `fast-export --reencode=yes`, so rewritten commits carry
+UTF-8 messages and no encoding header.
+
 **Timestamps** are redistributed to preserve relative commit density while
 snapping everything into your configured work window. A seeded PRNG adds subtle
 jitter so the result doesn't look mechanical.
 
-**Safety**: By default, Herodotus writes to a `herodotus/<branch>` branch,
-leaving your original history untouched. Use `--in-place` to rewrite directly (a
-backup ref is created automatically).
+**Safety**: By default, Herodotus writes to a new local `herodotus/<branch>`
+branch, leaving your original history untouched. This holds for any ref you pass
+with `-b`, not only local branches: `-b origin/main` writes
+`herodotus/origin/main` and leaves `refs/remotes/origin/main` alone.
+
+In every mode, revisions that are not refs (a commit hash, `HEAD~2`, a detached
+`HEAD`) and annotated tags are refused; create a branch from them first. A name
+that is both a branch and a tag is refused as ambiguous; pass the full refname
+(e.g. `-b refs/heads/release`).
+
+Use `--in-place` to rewrite the given ref itself: the ref's original value is
+kept in `refs/original/herodotus/<branch>`. This applies to whatever ref you
+pass, so `--in-place -b origin/main` rewrites the remote-tracking ref
+`refs/remotes/origin/main` (backed up first). Backups are never
+overwritten; if that ref already exists (say, from an earlier in-place run), it
+is left as is and the backup goes to a timestamped
+`refs/original/herodotus/<branch>@<unix-ts>` instead. The output names the ref
+that holds the backup.
 
 ## Install & test
 
