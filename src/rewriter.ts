@@ -28,10 +28,6 @@ function parseTimestamp(ts: string): number {
   return parseInt(ts.split(" ")[0], 10);
 }
 
-function formatTimestamp(epoch: number, tzOffset: string): string {
-  return `${epoch} ${tzOffset}`;
-}
-
 function getTzOffset(epoch: number, tz: string): string {
   const date = new Date(epoch * 1000);
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -51,20 +47,10 @@ function getTzOffset(epoch: number, tz: string): string {
 }
 
 /**
- * Find next LF in a Uint8Array starting from offset. Returns -1 if not found.
- */
-function findLF(buf: Uint8Array, start: number): number {
-  for (let i = start; i < buf.length; i++) {
-    if (buf[i] === LF) return i;
-  }
-  return -1;
-}
-
-/**
  * Read one line from buf starting at offset. Returns the line (without LF) and the next offset.
  */
 function readLine(buf: Uint8Array, offset: number): { line: string; next: number } {
-  const lfPos = findLF(buf, offset);
+  const lfPos = buf.indexOf(LF, offset);
   if (lfPos === -1) {
     return { line: decoder.decode(buf.subarray(offset)), next: buf.length };
   }
@@ -74,14 +60,21 @@ function readLine(buf: Uint8Array, offset: number): { line: string; next: number
   };
 }
 
+// Stream commands, encoded once for startsWith.
+const COMMIT = encoder.encode("commit ");
+const DATA = encoder.encode("data ");
+const BLOB = encoder.encode("blob");
+const MARK = encoder.encode("mark ");
+const RESET = encoder.encode("reset ");
+const TAG = encoder.encode("tag ");
+
 /**
- * Check if buf at offset starts with the given ASCII prefix.
+ * Check if buf at offset starts with the given prefix bytes.
  */
-function startsWith(buf: Uint8Array, offset: number, prefix: string): boolean {
-  const prefixBytes = encoder.encode(prefix);
-  if (offset + prefixBytes.length > buf.length) return false;
-  for (let i = 0; i < prefixBytes.length; i++) {
-    if (buf[offset + i] !== prefixBytes[i]) return false;
+function startsWith(buf: Uint8Array, offset: number, prefix: Uint8Array): boolean {
+  if (offset + prefix.length > buf.length) return false;
+  for (let i = 0; i < prefix.length; i++) {
+    if (buf[offset + i] !== prefix[i]) return false;
   }
   return true;
 }
@@ -122,14 +115,14 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
 
   let offset = 0;
   while (offset < buf.length) {
-    if (startsWith(buf, offset, "commit ")) {
+    if (startsWith(buf, offset, COMMIT)) {
       const headerStart = offset;
       const headerLines: string[] = [];
       let authorLine = "";
       let committerLine = "";
 
       // Read header lines until "data "
-      while (offset < buf.length && !startsWith(buf, offset, "data ")) {
+      while (offset < buf.length && !startsWith(buf, offset, DATA)) {
         const { line, next } = readLine(buf, offset);
         if (line.startsWith("author ")) authorLine = line;
         else if (line.startsWith("committer ")) committerLine = line;
@@ -139,7 +132,7 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
 
       // Parse data section
       let message = "";
-      if (startsWith(buf, offset, "data ")) {
+      if (startsWith(buf, offset, DATA)) {
         const { line, next } = readLine(buf, offset);
         const dataLength = parseInt(line.split(" ")[1], 10);
         offset = next;
@@ -165,10 +158,10 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
           break;
         }
         if (
-          startsWith(buf, offset, "commit ") ||
-          startsWith(buf, offset, "blob") ||
-          startsWith(buf, offset, "reset ") ||
-          startsWith(buf, offset, "tag ")
+          startsWith(buf, offset, COMMIT) ||
+          startsWith(buf, offset, BLOB) ||
+          startsWith(buf, offset, RESET) ||
+          startsWith(buf, offset, TAG)
         ) {
           break;
         }
@@ -187,19 +180,19 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
         message,
         changeCount,
       });
-    } else if (startsWith(buf, offset, "blob")) {
+    } else if (startsWith(buf, offset, BLOB)) {
       // Skip blob: read past header and data section (binary-safe)
       const { next: afterBlob } = readLine(buf, offset);
       offset = afterBlob;
 
       // Read mark line if present
-      if (startsWith(buf, offset, "mark ")) {
+      if (startsWith(buf, offset, MARK)) {
         const { next } = readLine(buf, offset);
         offset = next;
       }
 
       // Read data section
-      if (startsWith(buf, offset, "data ")) {
+      if (startsWith(buf, offset, DATA)) {
         const { line, next } = readLine(buf, offset);
         const blobSize = parseInt(line.split(" ")[1], 10);
         offset = next + blobSize;
@@ -354,7 +347,7 @@ export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
     const origCommitter = parseAuthorLine(commit.committerLine);
     const newIdentity = pickIdentity(i);
     const tzOffset = getTzOffset(newTimestamps[i], schedule.timezone);
-    const newTs = formatTimestamp(newTimestamps[i], tzOffset);
+    const newTs = `${newTimestamps[i]} ${tzOffset}`;
 
     // Transform message
     let message = stripAiCoAuthors(commit.message);
