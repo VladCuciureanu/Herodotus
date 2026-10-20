@@ -85,6 +85,14 @@ describe("herodotus init", () => {
     assertError(herodotus(["init", dir, "extra"]), /Unexpected argument: "extra".*--help/);
     assert.deepEqual(readdirSync(dir), []);
   });
+
+  it("ends the message with a full stop before the --help hint", () => {
+    assertError(
+      herodotus(["init", dir, "extra"]),
+      /^herodotus: Unexpected argument: "extra"\. See herodotus --help\.\n$/,
+    );
+    assertError(herodotus(["--seed"]), /argument missing\. See herodotus --help\.\n$/);
+  });
 });
 
 describe("parseCli", () => {

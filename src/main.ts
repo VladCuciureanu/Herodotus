@@ -87,7 +87,9 @@ function formatError(err: unknown): string {
   const isUsageError =
     err instanceof UsageError ||
     (err instanceof Error && "code" in err && String(err.code).startsWith("ERR_PARSE_ARGS"));
-  return `herodotus: ${line}${isUsageError ? " See herodotus --help." : ""}`;
+  if (!isUsageError) return `herodotus: ${line}`;
+  const sentence = /[.!?]$/.test(line) ? line : `${line}.`;
+  return `herodotus: ${sentence} See herodotus --help.`;
 }
 
 main().catch((err) => {
