@@ -85,6 +85,14 @@ describe("herodotus init", () => {
     assertError(herodotus(["init", dir, "extra"]), /Unexpected argument: "extra".*--help/);
     assert.deepEqual(readdirSync(dir), []);
   });
+
+  it("ends the message with a full stop before the --help hint", () => {
+    assertError(
+      herodotus(["init", dir, "extra"]),
+      /^herodotus: Unexpected argument: "extra"\. See herodotus --help\.\n$/,
+    );
+    assertError(herodotus(["--seed"]), /argument missing\. See herodotus --help\.\n$/);
+  });
 });
 
 describe("parseCli", () => {
@@ -141,5 +149,10 @@ describe("--help", () => {
     assert.ok(options.length > 10);
     const columns = new Set(options.map((line) => line.search(/\S+(?: \S+)*$/)));
     assert.equal(columns.size, 1, options.join("\n"));
+  });
+
+  it("describes init and says a -c file must exist", () => {
+    assert.match(USAGE, /^ {2}init \[-c <file>\] +Write a starter config/m);
+    assert.match(USAGE, /-c, --config <file> +Config file, relative to <repo-path>; must exist/);
   });
 });

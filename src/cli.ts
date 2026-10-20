@@ -114,9 +114,16 @@ export const USAGE = `herodotus — rewrite git history with plausible identitie
 Usage: herodotus [options] [<repo-path>]
        herodotus init [-c <file>] [<repo-path>]
 
+<repo-path> defaults to the current directory.
+
+Commands:
+  init [-c <file>]             Write a starter config with your git identity
+                               (default: .herodotus.toml); never overwrites
+
 Options:
   -i, --identity <name:email>  Identity to use (repeatable)
-  -c, --config <file>          Config file (default: .herodotus.toml)
+  -c, --config <file>          Config file, relative to <repo-path>; must exist
+                               if given (default: .herodotus.toml, optional)
   -b, --branch <ref>           Branch or other ref to rewrite (default: current branch)
   --start <HH:MM>              Workday start (default: 09:00)
   --end <HH:MM>                Workday end (default: 18:00)
