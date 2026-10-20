@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { stringify } from "smol-toml";
 
 function getGitConfig(key: string, cwd: string): string | null {
   const result = spawnSync("git", ["config", key], {
@@ -24,10 +25,8 @@ export async function runInit(repoPath: string, configPath = ".herodotus.toml"):
   const email = getGitConfig("user.email", repoPath) ?? "you@example.com";
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  const content = `[[identity]]
-name = "${name}"
-email = "${email}"
-
+  // stringify escapes quotes and backslashes in the git name and email.
+  const content = `${stringify({ identity: [{ name, email }] })}
 [schedule]
 # start = "09:00"
 # end = "18:00"

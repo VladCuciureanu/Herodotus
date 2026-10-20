@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { parse as parseToml } from "smol-toml";
 import { parseCli } from "../src/cli.ts";
 import { parseSchedule } from "../src/config.ts";
 import { runInit } from "../src/init.ts";
@@ -114,6 +116,27 @@ describe("library functions do not exit the process", () => {
     try {
       writeFileSync(join(dir, ".herodotus.toml"), "");
       await assert.rejects(runInit(dir), /already exists/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("runInit", () => {
+  it("escapes quotes and backslashes in the git identity", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "herodotus-init-"));
+    const name = String.raw`Ada "Countess" \ Lovelace`;
+    try {
+      for (const args of [
+        ["init", "-q"],
+        ["config", "user.name", name],
+        ["config", "user.email", "ada@example.com"],
+      ]) {
+        assert.equal(spawnSync("git", args, { cwd: dir }).status, 0);
+      }
+      await runInit(dir);
+      const toml = parseToml(readFileSync(join(dir, ".herodotus.toml"), "utf8"));
+      assert.deepEqual({ ...(toml.identity as object[])[0] }, { name, email: "ada@example.com" });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
