@@ -86,7 +86,6 @@ interface CommitRegion {
   bodyStart: number; // offset after the message content
   bodyEnd: number; // end of the commit block
   authorLine: string;
-  committerLine: string;
   message: string;
   changeCount: number;
 }
@@ -119,13 +118,11 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
       const headerStart = offset;
       const headerLines: string[] = [];
       let authorLine = "";
-      let committerLine = "";
 
       // Read header lines until "data "
       while (offset < buf.length && !startsWith(buf, offset, DATA)) {
         const { line, next } = readLine(buf, offset);
         if (line.startsWith("author ")) authorLine = line;
-        else if (line.startsWith("committer ")) committerLine = line;
         headerLines.push(line);
         offset = next;
       }
@@ -176,7 +173,6 @@ function parseFastExportBinary(buf: Uint8Array): ParsedExport {
         bodyStart,
         bodyEnd: offset,
         authorLine,
-        committerLine,
         message,
         changeCount,
       });
@@ -344,7 +340,6 @@ export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
   for (let i = 0; i < commits.length; i++) {
     const commit = commits[i];
     const origAuthor = parseAuthorLine(commit.authorLine);
-    const origCommitter = parseAuthorLine(commit.committerLine);
     const newIdentity = pickIdentity(i);
     const tzOffset = getTzOffset(newTimestamps[i], schedule.timezone);
     const newTs = `${newTimestamps[i]} ${tzOffset}`;
@@ -365,14 +360,10 @@ export async function rewrite(config: HerodotusConfig): Promise<RewriteResult> {
     changeLog.push({
       index: i,
       originalAuthor: origAuthor.identity,
-      originalCommitter: origCommitter.identity,
       authorDate: origAuthor.timestamp,
-      commitDate: origCommitter.timestamp,
       message: message.split("\n")[0],
       newAuthor: newIdentity,
-      newCommitter: newIdentity,
       newAuthorDate: newTs,
-      newCommitDate: newTs,
     });
   }
 

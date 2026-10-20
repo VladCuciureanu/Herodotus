@@ -24,12 +24,8 @@ export interface HerodotusConfig {
 export interface CommitInfo {
   index: number;
   originalAuthor: Identity;
-  originalCommitter: Identity;
   authorDate: string; // raw fast-export format: "timestamp tz"
-  commitDate: string;
   message: string;
   newAuthor: Identity;
-  newCommitter: Identity;
   newAuthorDate: string;
-  newCommitDate: string;
 }
